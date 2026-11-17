@@ -64,7 +64,6 @@ const C = {
 const THEMES = [
   { id: "light", label: "Light", colors: ["#FFFFFF", "#4A5568", "#1A1A1A", "#E8ECF2"] },
   { id: "dark", label: "Dark", colors: ["#1A2333", "#CBD5E1", "#E5E7EB", "#0F1724"] },
-  { id: "navy", label: "Navy", colors: ["#12294A", "#B9AB92", "#F3EFE6", "#0A1F3D"] },
   { id: "blue", label: "Blue Light", colors: ["#FBF4E6", "#5A4F3C", "#2A2318", "#EEDDBE"] },
   { id: "blue+", label: "Blue Light+", colors: ["#F7E8CC", "#5C4A2E", "#2E2415", "#E6CC9C"] },
 ];
@@ -2574,7 +2573,7 @@ export default function SyllabusBuilder() {
   /* ---------- editor layout: navigation, form controls, and matching live preview ---------- */
   return (
     <div className={wavesOnly ? "app-shell panels-hidden" : "app-shell"} style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", minHeight: "100vh" }}>
-      {glass && <WaveBackground light={theme !== "navy" && theme !== "dark"} onSoftwareGraphics={glassTooSlow} />}
+      {glass && <WaveBackground light={theme !== "dark"} onSoftwareGraphics={glassTooSlow} />}
       {slowNotice && (
         <div ref={noticeRef} className="slow-notice app-panel" role="status">
           <span>Turned off Glass because things were running slow.</span>

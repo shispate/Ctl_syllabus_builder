@@ -214,43 +214,6 @@ body { background: var(--wash); }
 .cta:focus-visible { outline: 2px solid var(--bar-ink); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .cta:hover { transform: none; } }
 
-/* Navy theme: navy and sand */
-[data-theme="navy"] {
-  color-scheme: dark;
-  --wash: #0A1F3D;
-  --paper: #12294A;
-  --tint: #1B3657;
-  --line: rgba(233, 221, 200, 0.16);
-  --ink: #F3EFE6;
-  --slate: #B9AB92;
-  --muted: #A8A492;
-  --navy: #FAF6EE;
-  --orange: #FF8300;
-  --orange-text: #FF8300;
-  --field-line: rgba(233, 221, 200, 0.28);
-  --good: #4ADE80;
-  --goodBg: #12301F;
-  --warn: #FBBF24;
-  --warnBg: #3A2A10;
-  --scroll-thumb: rgba(233, 221, 200, 0.22);
-  --scroll-thumb-hover: rgba(233, 221, 200, 0.4);
-}
-
-/* Navy without Glass: solid panels are the same color as the boxes in them, so give the
-   boxes their own fill, make the lines stronger, and darken the page so panels lift off it */
-[data-theme="navy"]:not([data-glass]) {
-  --field-bg: #1B3657;
-  --field-line: rgba(233, 221, 200, 0.4);
-  --line: rgba(233, 221, 200, 0.22);
-}
-[data-theme="navy"]:not([data-glass]) body {
-  background: linear-gradient(175deg, #061529 0%, #081A33 50%, #051327 100%) fixed;
-}
-
-[data-theme="navy"] body {
-  background: linear-gradient(175deg, #0A1F3D 0%, #0D2341 50%, #0A1C36 100%) fixed;
-}
-
 /* Glass: on/off for any theme (data-glass on <html>). Each theme sets its own see-through amount. */
 :root {
   --glass-panel: rgba(255, 255, 255, 0.3);
@@ -259,10 +222,6 @@ body { background: var(--wash); }
   --glass-blur: blur(8px) saturate(1.4);
 }
 /* these have to come after the defaults above or they get overridden */
-[data-theme="navy"] {
-  --glass-panel: rgba(0, 0, 0, 0.3);
-  --glass-masthead: rgba(0, 0, 0, 0.3);
-}
 [data-theme="dark"] {
   --field-bg: #243049; /* boxes a step lighter than the panel, or they blend in */
   --glass-panel: rgba(26, 35, 51, 0.3);
