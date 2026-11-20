@@ -3327,11 +3327,11 @@ export default function SyllabusBuilder() {
                 const dates = buildWeekDates(d.semesterStart, i + 1);
                 push("weeks", { label: `${d.scheduleType === "modular" ? "Module" : "Week"} ${i + 1}`, dates: dates[i] || "", topics: "", due: "" });
               }}>Add {d.scheduleType === "modular" ? "module" : "week"}</AddRow>
-              <div className="group-box">
-                <label className="inset-row" style={{ marginTop: 0 }}>
-                  <span>Number of {d.scheduleType === "modular" ? "modules" : "weeks"}</span>
-                  <span className="inset-value">
-                    <input className="inset-input" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="1–15"
+              {/* a regular one-row card, like the rest of the form */}
+              <div className="field-group">
+                <Field label={`Number of ${d.scheduleType === "modular" ? "modules" : "weeks"}`}>
+                  <span className="inset-value week-count">
+                    <input className="inset-input" type="text" aria-label={`Number of ${d.scheduleType === "modular" ? "modules" : "weeks"}`} inputMode="numeric" pattern="[0-9]*" placeholder="1–15"
                       aria-invalid={weekCountWarning} value={weekCount}
                       onChange={(e) => {
                         const value = e.target.value;
@@ -3351,11 +3351,12 @@ export default function SyllabusBuilder() {
                       }));
                     }}>Build</button>
                   </span>
-                </label>
-                <div role="alert" className="group-note" style={{ color: UI.warn, minHeight: weekCountWarning ? undefined : 0, padding: weekCountWarning ? undefined : 0 }}>
-                  {weekCountWarning ? "Enter a whole number from 1 to 15." : ""}
-                </div>
+                </Field>
+                <RowHover />
               </div>
+              {weekCountWarning && (
+                <div role="alert" className="group-note is-warn" style={{ marginTop: -8 }}><AlertTriangle size={13} aria-hidden="true" />Enter a whole number from 1 to 15.</div>
+              )}
               <button type="button" className="destructive-row" style={{ marginTop: 6 }} onClick={async () => {
                 const unit = d.scheduleType === "modular" ? "modules" : "weeks";
                 if (d.weeks.length && !(await askConfirm({ title: `Delete all ${unit}?`, text: "Their topics and due dates will be erased. You can't undo this.", action: "Delete", destructive: true }))) return;

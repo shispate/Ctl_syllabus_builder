@@ -443,12 +443,9 @@ body { background: var(--wash); }
 }
 .input-base[data-multiline] { border-radius: 12px; }
 
-/* focus ring */
+/* no outline on text boxes; whatever holds them (row, writing box, inset row) shows a gray highlight instead */
 .editor-form input:focus,
-.editor-form div:has(> [contenteditable]:focus),
-.editor-form button[aria-haspopup="listbox"]:focus-visible {
-  box-shadow: 0 0 0 1.5px var(--ring);
-}
+.editor-form div:has(> [contenteditable]:focus) { box-shadow: none; }
 
 /* segmented control (percentage / points) */
 .segmented {
@@ -557,7 +554,8 @@ body { letter-spacing: -0.011em; }
 
 /* cards people add */
 .card-field-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 18px; }
-.card-field-title { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; padding: 2px 0; }
+.card-field-title { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; padding: 2px 6px; margin-left: -6px; border-radius: 8px; transition: background 0.15s ease; }
+.card-field-title:focus { background: color-mix(in srgb, var(--ink) 11%, transparent); } /* the title stays lined up; the highlight reaches 6px past it */
 .card-field-title::placeholder { color: var(--muted); font-weight: 600; }
 .card-field-remove { display: flex; padding: 6px; border-radius: 999px; color: var(--muted); cursor: pointer; transition: background 0.15s ease, color 0.15s ease; }
 .card-field-remove:hover { background: color-mix(in srgb, #FF3B30 12%, transparent); color: #FF3B30; }
@@ -609,7 +607,8 @@ body { letter-spacing: -0.011em; }
   border-radius: 14px; background: color-mix(in srgb, var(--ink) 5%, transparent); font-size: 15px; color: var(--ink);
 }
 label.inset-row { cursor: text; }
-.inset-row:focus-within { box-shadow: 0 0 0 1.5px var(--ring); }
+.inset-row { transition: background 0.15s ease; }
+.inset-row:focus-within { background: color-mix(in srgb, var(--ink) 11%, transparent); }
 .inset-value { display: flex; align-items: center; gap: 4px; }
 .editor-form input.inset-input {
   min-width: 0; width: 140px; border: 0; outline: none; background: transparent; box-shadow: none;
@@ -622,7 +621,10 @@ label.inset-row { cursor: text; }
 .scale-grade { display: flex; align-items: baseline; gap: 12px; }
 .scale-grade b { width: 14px; font-weight: 600; }
 .scale-grade span { color: var(--muted); }
-.editor-form .scale-row input.inset-input { width: 34px; text-align: right; }
+.editor-form .scale-row input.inset-input {
+  width: 40px; height: 28px; padding: 0; border-radius: 999px; text-align: center;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+} /* a visible box so it reads as editable */
 .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 /* meeting days: one track, picked days fill orange, neighbors join into one pill */
 .day-picker { position: relative; display: flex; width: fit-content; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
@@ -1014,3 +1016,16 @@ button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--fiel
 .editor-form .field:not(:has([data-multiline])):has(.dropdown):focus-within { background: transparent; }
 .editor-form .field:not(:has([data-multiline])):is(:focus-within, :has(.dropdown.is-open)) .melt-shape path:last-child { stroke: transparent; fill: var(--focus-tint); }
 /* open in a card it floats over the rows below, so it has to be solid */
+/* writing areas: only the box you type in highlights, the card around it stays put */
+.editor-form .field:has([data-multiline]):focus-within { background: var(--field-bg); }
+.editor-form [data-multiline] { transition: background 0.15s ease; }
+.editor-form :is(.field, .choice-more) [data-multiline]:focus-within { background: color-mix(in srgb, var(--ink) 11%, transparent); } /* every writing box, one rule */
+
+/* number of weeks: the count and its Build button sit on the right of the row */
+.editor-form .field .week-count { justify-content: flex-end; padding-right: 7px; }
+.editor-form .field .week-count { gap: 8px; }
+/* a visible box so it reads as editable, like the grading scale's cutoffs */
+.editor-form .field .field-input .week-count input.inset-input {
+  width: 40px; height: 28px; padding: 0; border-radius: 999px; text-align: center;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
