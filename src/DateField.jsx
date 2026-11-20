@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useDismiss } from "./ui.js";
 
 // our own calendar since the browser's can't be moved or styled
 // value is "YYYY-MM-DD" like <input type="date">
@@ -14,14 +15,9 @@ export default function DateField({ value, onChange, label = "Date", placeholder
   const picked = value && y0 ? new Date(y0, m0 - 1, d0) : null;
   const [view, setView] = useState(() => (picked ? { y: picked.getFullYear(), m: picked.getMonth() } : { y: new Date().getFullYear(), m: new Date().getMonth() }));
 
+  useDismiss(open, () => setOpen(false), ref);
   useEffect(() => {
-    if (!open) return undefined;
-    if (picked) setView({ y: picked.getFullYear(), m: picked.getMonth() });
-    const away = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+    if (open && picked) setView({ y: picked.getFullYear(), m: picked.getMonth() });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = new Date();

@@ -123,11 +123,11 @@ async function openFreshSearchSession(termCode) {
 
 // Banner needs a session set to a term before it'll search, and opening one
 // takes 3 requests, so we keep one per term and reuse it.
-// The warm-up uses its own session (cacheKey) so it can't mess up normal searches.
 // If two requests open the same session at the same time, they share it.
 const sessionOpening = new Map();
 
-async function openSearchSession(termCode, { cacheKey = termCode } = {}) {
+async function openSearchSession(termCode) {
+  const cacheKey = termCode;
   const cached = sessionCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) return cached.cookie;
 
@@ -193,27 +193,6 @@ export async function searchTerm(termCode, filters) {
     if (sessionCache.get(termCode)?.cookie === cookie) sessionCache.delete(termCode);
   }
   return [];
-}
-
-// One page of every section in a term. Only used by the warm-up.
-export async function fetchCatalogPage(termCode, { pageOffset = 0, pageMaxSize = 500 } = {}) {
-  // separate session from normal searches
-  const cookie = await openSearchSession(termCode, { cacheKey: `${termCode}:bulk` });
-  if (!cookie) return { rows: [], totalCount: 0 };
-
-  const params = new URLSearchParams({
-    txt_term: termCode,
-    pageOffset: String(pageOffset),
-    pageMaxSize: String(pageMaxSize),
-  });
-  const url = `https://ban9ssb1.utm.edu/StudentRegistrationSsb/ssb/searchResults/searchResults?${params.toString()}`;
-  // one page at a time, same reason as searches
-  return withCookieLock(cookie, async () => {
-    const response = await fetch(url, { headers: { ...bannerHeaders("application/json, text/javascript, */*; q=0.01"), Cookie: cookie } });
-    if (!response.ok) { await response.text().catch(() => {}); return { rows: [], totalCount: 0 }; }
-    const json = await response.json();
-    return { rows: Array.isArray(json?.data) ? json.data : [], totalCount: json?.totalCount || 0 };
-  });
 }
 
 // Returns the whole row so callers can grab the instructor too.

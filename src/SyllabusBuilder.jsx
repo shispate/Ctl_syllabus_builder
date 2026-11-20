@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import {
   BookOpen, User, MessageSquare, Target, Library, Scale, Gavel, ShieldCheck, CalendarDays, FileDown,
-  Check, AlertTriangle, Plus, Trash2, Save, Printer, Lock, ChevronRight, ChevronUp, PanelRightClose,
-  PanelRightOpen, Maximize2, Minimize2, FlaskConical, X, Loader2, Download, FileText, Keyboard, ClipboardCheck, Gauge,
+  Check, AlertTriangle, Plus, Trash2, Save, Printer, Lock, ChevronRight,
+  Maximize2, Minimize2, FlaskConical, X, Loader2, Download, FileText, Keyboard, ClipboardCheck, Gauge,
 } from "lucide-react";
 import { flushSync } from "react-dom";
-import { UI, inputBase } from "./ui.js";
-import Dropdown, { DropdownList, MorphChevron } from "./Dropdown.jsx";
+import { UI, inputBase, reduceMotion, useDismiss, glideHeight, foldIn, foldOut, stairRef } from "./ui.js";
+import Dropdown, { MorphChevron, SlideHighlight, SuggestList } from "./Dropdown.jsx";
 import DateField from "./DateField.jsx";
 import PagedPreview, { previewSpot, PAGE_CSS, countPages, pagesHtml } from "./PagedPreview.jsx";
 import { SUBJECTS } from "./subjectCodes.js";
@@ -130,6 +130,13 @@ const OUTCOME_LIBRARY = [
   },
 ];
 
+// title and one-line description for the AI tier list (on screen only; the syllabus text is in AI_POLICIES)
+const AI_TIER_TEXT = {
+  mixed: ["Mixed use", "Students can use AI only on assignments you mark."],
+  open: ["Unrestricted use", "Students can use AI on any assignment."],
+  prohibited: ["Prohibited", "Students can't use AI in this course."],
+  custom: ["Write my own", "Write your own policy for this course."],
+};
 const AI_POLICIES = {
   mixed: {
     label: "Mixed use · permitted on designated assignments",
@@ -510,12 +517,6 @@ const DEPARTMENTS = DEPARTMENT_DATA.map(({ college, departments }) => ({
   college, names: departments.map((d) => d.name),
 }));
 
-// subject code -> "Department of X". Unclear ones like GENS and HNRS are left out.
-// Preloads the whole term's catalog so typing is instant. Off because it's a lot
-// of requests to Banner every visit and live search is fast enough.
-// Turn it on if typing feels slow.
-const WARM_CATALOG = false;
-
 // true when the live lookup can't be reached at all (no server, or Banner is down),
 // not when Banner just didn't find anything
 const liveLookupUnreachable = (res) =>
@@ -531,7 +532,7 @@ for (const { departments } of DEPARTMENT_DATA) {
 // Builds a fresh blank draft. Returning a new object each time keeps the
 // initial state and every reset independent of each other.
 const createBlank = () => ({
-  code: "", title: "", crn: "", section: "", term: defaultTerm(), modality: "In person",
+  code: "", title: "", crn: "", section: "", term: defaultTerm(), modality: "In person", semester: "Full Semester",
   credits: "3", meetingPattern: "", meeting: "", meetingTime: "",
   location: "", exlocation: "", dept: "", prereq: "",
   instructor: "", email: "", phone: "", office: "", hours: "", address: "",
@@ -644,7 +645,8 @@ const blocksToBreaks = (html = "") => {
 const TextEditor = ({ value, onChange, placeholder, rows = 1, mono = false, singleLine = false, onBlur }) => {
   const editorRef = useRef(null);
 
-  useEffect(() => {
+  // before paint, so a box that's reused for the next item (after a delete) never shows the old text
+  useLayoutEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "";
     }
@@ -856,11 +858,7 @@ const SwitchRow = ({ checked, onChange, children }) => (
 
 // pop-up alert, closes on outside click or Escape
 const Dialog = ({ onClose, labelId, width = 300, children }) => {
-  useEffect(() => {
-    const esc = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", esc);
-    return () => document.removeEventListener("keydown", esc);
-  }, [onClose]);
+  useDismiss(true, onClose);
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={labelId}
@@ -890,16 +888,45 @@ const DayChips = ({ days, onToggle }) => (
 );
 
 // a row that opens to show more
-const ExpandRow = ({ open, onToggle, label, summary, children }) => (
+// openSummary: different right-side text while open; the two slide past each other
+const ExpandRow = ({ open, onToggle, label, summary, openSummary, children }) => (
   <div className={`expand-group${open ? " is-open" : ""}`}>
     <button className="list-row" onClick={onToggle} aria-expanded={open}>
       <span className="row-label">{label}</span>
-      <span className="row-detail">{summary}</span>
+      {openSummary == null
+        ? <span className="row-detail">{summary}</span>
+        : <span className="row-detail detail-swap">
+            <span aria-hidden={open || undefined}>{summary}</span>
+            <span aria-hidden={!open || undefined}>{openSummary}</span>
+          </span>}
       <MorphChevron open={open} />
     </button>
-    <div className="expand-more" inert={open ? undefined : ""}><div>{children}</div></div>
+    <div className="expand-more" inert={open ? undefined : ""}><div ref={stairRef} className={open ? "stair-reveal" : undefined}>{children}<SlideHighlight /></div></div>
   </div>
 );
+
+// sample texts as a row that opens to list them, like the export rows; picking one inserts it
+// the right side says which sample is in the box, and "Edited" once it's been changed
+const plainText = (v) => richToPlain(v || "").replace(/\s+/g, " ").trim();
+const SampleRows = ({ label, options, current, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const now = plainText(current);
+  const match = now ? options.find((o) => plainText(o.text ?? o.value) === now) : null;
+  const [lastUsed, setLastUsed] = useState(null);
+  useEffect(() => { if (match) setLastUsed(match.label); }, [match?.label]);
+  const summary = match ? match.label : lastUsed && now ? `${lastUsed} · Edited` : `${options.length} samples`;
+  return (
+    <ExpandRow open={open} onToggle={() => setOpen((o) => !o)} label="Start from a sample" summary={summary}>
+      {options.map((o) => (
+        <button key={o.label} type="button" className="list-item" aria-label={`${label}: ${o.label}`}
+          onClick={() => { setOpen(false); onChange(o.value); }}>
+          <span style={{ flex: 1 }}>{o.label}</span>
+          <span className="item-go">Use<ChevronRight size={13} aria-hidden="true" /></span>
+        </button>
+      ))}
+    </ExpandRow>
+  );
+};
 
 /* ============================================================ */
 
@@ -941,13 +968,9 @@ export default function SyllabusBuilder() {
   const wavesOnly = panelsHidden && glass;
   const [hoverTheme, setHoverTheme] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPeek, setPickerPeek] = useState(false); // hovered or focused, which also shows the swatches
   const pickerRef = useRef(null);
-  useEffect(() => {
-    if (!pickerOpen) return undefined;
-    const onDown = (e) => { if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [pickerOpen]);
+  useDismiss(pickerOpen, () => setPickerOpen(false), pickerRef);
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
@@ -958,7 +981,7 @@ export default function SyllabusBuilder() {
 
   // fades between themes, just switches if the browser can't
   const changeLook = (apply) => {
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduce = reduceMotion();
     if (!document.startViewTransition || reduce) { apply(); return; }
     // the new theme has to be on the page before the fade starts
     document.startViewTransition(() => flushSync(apply));
@@ -989,7 +1012,7 @@ export default function SyllabusBuilder() {
   // slides the notice back out before removing it
   const hideNotice = () => {
     const el = noticeRef.current;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduce = reduceMotion();
     if (!el || reduce || !el.animate) { setSlowNotice(false); return; }
     el.animate([{ transform: "none", opacity: 1 }, { transform: "translateX(calc(100% + 24px))", opacity: 0 }],
       { duration: 250, easing: "ease-in", fill: "forwards" }).finished.then(() => setSlowNotice(false));
@@ -1033,9 +1056,40 @@ export default function SyllabusBuilder() {
   const [weekCount, setWeekCount] = useState("15");
   const [weekCountWarning, setWeekCountWarning] = useState(false);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(true);
+  // preview zoom: null fits the width, otherwise a size from 50% to 200%
+  const [previewZoom, setPreviewZoom] = useState(null);
+  const [previewScale, setPreviewScale] = useState(1);
   const [showDone, setShowDone] = useState(false);
+  const [labReveal, setLabReveal] = useState(false); // staircase the lab fields in, only right after the switch turns on
+  const [labLeaving, setLabLeaving] = useState(false); // and back out (bottom first) before they're removed
+  const toggleLab = (on) => {
+    if (on) { setLabLeaving(false); setLabReveal(true); set("hasLab", true); return; }
+    if (reduceMotion()) { set("hasLab", false); return; }
+    setLabReveal(false);
+    setLabLeaving(true);
+    setTimeout(() => { setLabLeaving(false); set("hasLab", false); }, 10 * 35 + 200); // last row's delay + its fade
+  };
   const [fullPolicies, setFullPolicies] = useState([]); // policies with Show more open
+  const policyTextRefs = useRef({});
+  const [policyClosing, setPolicyClosing] = useState([]); // closing ones: the label says "more" while the text still shrinks
+  // Show more / less glides the text open or closed; closing cuts back to 3 lines only after the glide
+  const togglePolicy = (k) => {
+    const el = policyTextRefs.current[k];
+    const full = fullPolicies.includes(k);
+    const flip = () => setFullPolicies((f) => (full ? f.filter((x) => x !== k) : [...f, k]));
+    if (!el) { flip(); return; }
+    const from = el.getBoundingClientRect().height;
+    el.classList.toggle("is-full"); // measure the other size
+    const to = el.getBoundingClientRect().height;
+    el.classList.toggle("is-full");
+    const glide = glideHeight(el, from, to, { duration: 280 });
+    if (!glide) { flip(); return; }
+    // closing: the label switches now; clamp in the same instant the glide ends, or the full text flashes back for a frame
+    if (full) {
+      setPolicyClosing((c) => [...c, k]);
+      glide.onfinish = () => { el.classList.remove("is-full"); flip(); setPolicyClosing((c) => c.filter((x) => x !== k)); };
+    } else flip();
+  };
   const [openChecks, setOpenChecks] = useState([]); // export rows that are open
   const [showTextKeybinds, setShowTextKeybinds] = useState(false);
 
@@ -1087,19 +1141,7 @@ export default function SyllabusBuilder() {
   // saves search results so retyping doesn't hit Banner again
   const courseListCacheRef = useRef(new Map());
 
-  useEffect(() => {
-    if (!codeSuggestOpen) return undefined;
-    const onDocClick = (e) => {
-      if (codeSuggestRef.current && !codeSuggestRef.current.contains(e.target)) setCodeSuggestOpen(false);
-    };
-    const onKey = (e) => { if (e.key === "Escape") setCodeSuggestOpen(false); };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [codeSuggestOpen]);
+  useDismiss(codeSuggestOpen, () => setCodeSuggestOpen(false), codeSuggestRef);
 
   const pickCodeSuggestion = (s) => {
     if (s.type === "subject") {
@@ -1137,11 +1179,12 @@ export default function SyllabusBuilder() {
     }
 
     // full subject like "CSCI", so show its courses right away
+    // the subject itself is done, so drop the old subject rows while its courses load
+    setCodeSuggestions((prev) => prev.filter((x) => x.type === "course"));
 
     // live lookup is down, so search the offline catalog instead
     if (liveDownUntil > Date.now()) {
       let cancelled = false;
-      setCodeSuggestions([]);
       setCodeSuggestLoading(true);
       setCodeSuggestOpen(true);
       loadOfflineCatalog().then((catalog) => {
@@ -1160,21 +1203,6 @@ export default function SyllabusBuilder() {
       return () => { cancelled = true; };
     }
 
-    // only use the warm-up cache once it's completely done loading
-    const warmedList = warmCompleteRef.current.has(d.term)
-      ? courseListCacheRef.current.get(`${d.term}|${subjectPart}|`)
-      : null;
-    if (warmedList) {
-      const filtered = numberPart
-        ? warmedList.filter((c) => c.code.slice(subjectPart.length).trim().startsWith(numberPart))
-        : warmedList;
-      setCodeSuggestLoading(false);
-      setCodeSuggestions(filtered);
-      setCodeSuggestOpen(filtered.length > 0);
-      return undefined;
-    }
-
-    // "q:" keeps live search results separate from the warm-up cache
     const cacheKey = `q:${d.term}|${subjectPart}|${numberPart}`;
     const cached = courseListCacheRef.current.get(cacheKey);
     if (cached) {
@@ -1184,8 +1212,7 @@ export default function SyllabusBuilder() {
       return undefined;
     }
 
-    // clear old suggestions while the new search runs
-    setCodeSuggestions([]);
+    // keep the old suggestions up until the new ones arrive, so the list resizes once instead of emptying first
     setCodeSuggestLoading(true);
     setCodeSuggestOpen(true);
 
@@ -1245,21 +1272,10 @@ export default function SyllabusBuilder() {
   // same idea as the course cache, but for sections
   const sectionListCacheRef = useRef(new Map());
 
-  useEffect(() => {
-    if (!sectionSuggestOpen) return undefined;
-    const onDocClick = (e) => {
-      if (sectionSuggestRef.current && !sectionSuggestRef.current.contains(e.target)) setSectionSuggestOpen(false);
-    };
-    const onKey = (e) => { if (e.key === "Escape") setSectionSuggestOpen(false); };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [sectionSuggestOpen]);
+  useDismiss(sectionSuggestOpen, () => setSectionSuggestOpen(false), sectionSuggestRef);
 
   const sectionCourseRef = useRef(""); // which course the section is for
+  const [sectionSuggestLoading, setSectionSuggestLoading] = useState(false);
   const pickSectionSuggestion = (s) => {
     setD((p) => ({ ...p, section: s.section }));
     setSectionSuggestOpen(false);
@@ -1287,8 +1303,10 @@ export default function SyllabusBuilder() {
       return undefined;
     }
 
-    // clear old sections while the new search runs
+    // clear old sections while the new search runs; open the list now so the spinner shows
     setSectionSuggestions([]);
+    setSectionSuggestLoading(true);
+    if (sectionEmpty) setSectionSuggestOpen(true);
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -1301,89 +1319,30 @@ export default function SyllabusBuilder() {
         const sections = payload.sections || [];
         sectionListCacheRef.current.set(cacheKey, sections);
         setSectionSuggestions(sections);
-        if (sections.length && sectionEmpty) setSectionSuggestOpen(true);
+        setSectionSuggestLoading(false);
       } catch (error) {
         if (error.name === "AbortError") return;
         if (error instanceof TypeError) markLiveDown();
         setSectionSuggestions([]);
+        setSectionSuggestLoading(false);
+        setSectionSuggestOpen(false);
       }
     }, 450);
 
-    return () => { clearTimeout(timer); controller.abort(); };
+    return () => { clearTimeout(timer); controller.abort(); setSectionSuggestLoading(false); };
   }, [d.code, d.term, liveDownUntil]);
-  // Warm-up: loads the whole term's catalog in the background (off, see WARM_CATALOG).
-  const warmedTermsRef = useRef(new Set());
-  // set once every page has loaded (warmedTermsRef is set at the start)
-  const warmCompleteRef = useRef(new Set());
-
-  useEffect(() => {
-    const term = String(d.term || "").trim();
-    if (!WARM_CATALOG || !term || warmedTermsRef.current.has(term)) return undefined;
-
-    const PAGE_SIZE = 500;
-    const controller = new AbortController();
-
-    const applyPage = (payload) => {
-      for (const course of payload.courses || []) {
-        const subject = course.code.split(" ")[0];
-        const key = `${term}|${subject}|`;
-        const list = courseListCacheRef.current.get(key) || [];
-        if (!list.some((c) => c.code === course.code)) list.push({ type: "course", code: course.code, title: course.title });
-        courseListCacheRef.current.set(key, list);
-      }
-      for (const [code, sections] of Object.entries(payload.sectionsByCode || {})) {
-        const [subject, courseNumber] = code.split(" ");
-        sectionListCacheRef.current.set(`${term}|${subject}|${courseNumber}`, sections);
-      }
-    };
-
-    const fetchPage = async (pageOffset) => {
-      const url = `/api/banner?action=catalog-page&term=${encodeURIComponent(term)}&offset=${pageOffset}&size=${PAGE_SIZE}`;
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) throw new Error("warm-up page failed");
-      return res.json();
-    };
-
-    // wait a bit so typing a term doesn't start a warm-up every keystroke
-    const timer = setTimeout(() => {
-      warmedTermsRef.current.add(term);
-      (async () => {
-        try {
-          const first = await fetchPage(0);
-          applyPage(first);
-
-          const totalCount = first.totalCount || 0;
-          const remainingOffsets = [];
-          for (let o = PAGE_SIZE; o < totalCount; o += PAGE_SIZE) remainingOffsets.push(o);
-
-          // one page at a time, Banner's paging breaks if they overlap
-          for (const offset of remainingOffsets) {
-            const payload = await fetchPage(offset);
-            applyPage(payload);
-          }
-
-          warmCompleteRef.current.add(term);
-        } catch {
-          // failed or cancelled, so unmark the term and it'll try again later
-          warmedTermsRef.current.delete(term);
-        }
-      })();
-    }, 450);
-
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [d.term]);
-
   const frameRef = useRef(null);
   const previewRef = useRef(null);
   const formRef = useRef(null);
   const lastGradingItemRef = useRef(null);
 
-  useEffect(() => {
-    if (!previewFullscreen) return;
-    const onKeyDown = (event) => { if (event.key === "Escape") setPreviewFullscreen(false); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [previewFullscreen]);
+  // full screen glides: the panel grows to fill the screen while the pages and controls slide to their new spots
+  const toggleFullscreen = (on) => {
+    const flip = () => setPreviewFullscreen((f) => (on ?? !f));
+    if (!document.startViewTransition || reduceMotion()) { flip(); return; }
+    document.startViewTransition(() => flushSync(flip));
+  };
+  useDismiss(previewFullscreen, () => toggleFullscreen(false));
 
   // Which syllabus heading each editor tab and each repeated section maps to.
   // One entry per tab in TABS, in the same order. null means that tab has no
@@ -1579,13 +1538,6 @@ export default function SyllabusBuilder() {
     if (!el) return null;
     return el.scrollHeight > el.clientHeight + 1 ? el : null;
   };
-  const scrollFormToPixel = (pixels, behavior = "auto") => {
-    const scroller = formScroller();
-    const maxScroll = scroller ? Math.max(0, scroller.scrollHeight - scroller.clientHeight) : 0;
-    const top = Math.min(maxScroll, Math.max(0, Number(pixels) || 0));
-    if (scroller) scroller.scrollTo({ top, behavior });
-    else window.scrollTo({ top, behavior });
-  };
 
   useEffect(() => {
     const form = formRef.current;
@@ -1743,13 +1695,14 @@ export default function SyllabusBuilder() {
   const setDeep = (k, i, key, v) => {
     setD((p) => { const a = [...p[k]]; a[i] = { ...a[i], [key]: v }; return { ...p, [k]: a }; });
   };
-  // Add one item to a repeated syllabus section. The newly added box is saved with
-  // its own pixel offset, then after the DOM commits the preview scrolls to that
-  // offset and the form scrolls the new box into view. Focusing is done with
-  // preventScroll so the browser does not jump before our controlled scroll.
+  // adds an item to a repeated section: the new box grows in and the form glides to show it
+  // focus uses preventScroll so the browser doesn't jump before our own scroll
   const push = (k, obj) => {
     const newItemIndex = Array.isArray(d[k]) ? d[k].length : 0;
-    setD((p) => ({ ...p, [k]: [...(p[k] || []), obj] }));
+    // render now and start growing before the first paint, or it shows at full size for a frame first
+    flushSync(() => setD((p) => ({ ...p, [k]: [...(p[k] || []), obj] })));
+    const added = [...(formRef.current?.querySelectorAll(`[data-box-key="${k}"]`) || [])].at(-1);
+    const grow = added && foldIn(added);
     // Save (and reserve) a pixel position for this text box before it renders.
     savedBoxOffsets.current[`${k}-${newItemIndex}`] = newItemIndex * boxStepFor(k);
     window.requestAnimationFrame(() => {
@@ -1764,10 +1717,12 @@ export default function SyllabusBuilder() {
       const base = scroller ? scroller.getBoundingClientRect().top : 0;
       const pixels = last.getBoundingClientRect().top - base + (scroller ? scroller.scrollTop : window.scrollY) - 60;
       formBoxPositions.current[id] = Math.max(0, pixels);
-      // Keep the form from jumping: set its scroll to the new box's saved spot.
-      scrollFormToPixel(formBoxPositions.current[id], "auto");
-      // Also keep the preview aligned with the section's heading.
-      if (k !== "customDescriptions") scrollPreviewToBox(k, newItemIndex, "auto");
+      // the new box grows open, then the form glides just far enough to show it (no jump)
+      const reduce = reduceMotion();
+      const reveal = () => last.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+      if (grow) grow.finished.then(reveal, () => {}); else reveal();
+      // keep the preview aligned with the section's heading
+      if (k !== "customDescriptions") scrollPreviewToBox(k, newItemIndex, reduce ? "auto" : "smooth");
       const field = last.querySelector("input, textarea, select");
       if (field) {
         skipNextFocusScrollRef.current = true;
@@ -1802,27 +1757,37 @@ export default function SyllabusBuilder() {
     return next;
   });
 
+  // the box fades and folds shut so the ones below slide up, then it's really removed
+  const fadeOutDrop = (k, i) => {
+    const box = formRef.current?.querySelector(`[data-box-key="${k}"][data-box-index="${i}"]`);
+    if (box?.dataset.leaving) return;
+    const anim = foldOut(box);
+    if (!anim) { applyDrop(k, i); return; }
+    box.dataset.leaving = "1";
+    box.style.pointerEvents = "none";
+    anim.onfinish = () => {
+      // boxes are keyed by index, so this node gets reused by the next item: reset it in the same commit
+      flushSync(() => applyDrop(k, i));
+      anim.cancel();
+      delete box.dataset.leaving;
+      box.style.pointerEvents = "";
+    };
+  };
+
   const drop = (k, i) => {
     if (entryHasContent(d[k][i])) {
       setPendingDelete({ k, i });
       return;
     }
-    applyDrop(k, i);
+    fadeOutDrop(k, i);
   };
 
   const confirmDrop = () => {
     if (!pendingDelete) return;
     const { k, i } = pendingDelete;
-    applyDrop(k, i);
     setPendingDelete(null);
+    fadeOutDrop(k, i);
   };
-
-  useEffect(() => {
-    if (!pendingDelete) return undefined;
-    const closeOnEscape = (e) => { if (e.key === "Escape") setPendingDelete(null); };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [pendingDelete]);
 
   const setLab = (k, v) => setD((p) => ({ ...p, lab: { ...p.lab, [k]: v } }));
   const toggleLabDay = (n) => setD((p) => ({
@@ -2571,6 +2536,13 @@ export default function SyllabusBuilder() {
     /* the print's darker text orange is only 3.3:1 on the dark paper; the theme orange is 6.4:1 */
     [data-theme="dark"] .doc-preview.themed .ct,
     [data-theme="dark"] .doc-preview.themed .grid td .tag{color:var(--orange)}
+    /* blue light themes: warm paper, so the page isn't the one bright-white thing on screen */
+    [data-theme="blue"] .doc-preview.themed{background:#FFFBF3}
+    [data-theme="blue+"] .doc-preview.themed{background:#FFF6E6}
+    [data-theme="blue"] .doc-preview.themed .grid th, [data-theme="blue"] .doc-preview.themed .grid tr.tot td,
+    [data-theme="blue+"] .doc-preview.themed .grid th, [data-theme="blue+"] .doc-preview.themed .grid tr.tot td{background:var(--tint)}
+    [data-theme="blue"] .doc-preview.themed .primer, [data-theme="blue+"] .doc-preview.themed .primer{background:var(--paper)}
+    [data-theme="blue"] .doc-preview.themed .hdr-l img, [data-theme="blue+"] .doc-preview.themed .hdr-l img{mix-blend-mode:multiply} /* the logo's white box takes the paper color */
   `;
 
   const fullHtml = () =>
@@ -2734,12 +2706,6 @@ export default function SyllabusBuilder() {
           </div>
         </div>
         <div className="masthead-right">
-          {/* only shows when the preview is hidden */}
-          {!previewOpen && (
-            <button type="button" className="bar-button" onClick={() => setPreviewOpen(true)} title="Show the preview">
-              <PanelRightOpen size={16} /><span>Show preview</span>
-            </button>
-          )}
           <div className="progress-ring" title="Readiness checks passed">
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
               <circle cx="9" cy="9" r="7" className="ring-track" />
@@ -2783,7 +2749,8 @@ export default function SyllabusBuilder() {
             );
           })}
           <div ref={pickerRef} className={pickerOpen ? "theme-picker is-open" : "theme-picker"}
-            onMouseLeave={() => setHoverTheme(null)}>
+            onMouseEnter={() => setPickerPeek(true)} onMouseLeave={() => { setHoverTheme(null); setPickerPeek(false); }}
+            onFocus={() => setPickerPeek(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setPickerPeek(false); }}>
             <button type="button" className="theme-summary" onClick={() => setPickerOpen((o) => !o)}
               aria-expanded={pickerOpen} aria-controls="theme-options" title="Change the theme">
               <span className="theme-picker-label" id="theme-picker-label">Theme</span>
@@ -2796,7 +2763,7 @@ export default function SyllabusBuilder() {
                   <FitText text={text} className={previewing ? "theme-name is-preview" : "theme-name"} />
                 );
               })()}
-              <ChevronUp size={12} className="theme-chevron" aria-hidden="true" />
+              <MorphChevron open={pickerOpen || pickerPeek} up size={13} />
             </button>
             <div className="theme-options" id="theme-options"><div>
             <div className="theme-swatches" role="radiogroup" aria-labelledby="theme-picker-label"
@@ -2847,28 +2814,16 @@ export default function SyllabusBuilder() {
                       onFocus={() => { if (codeSuggestions.length) setCodeSuggestOpen(true); }}
                     />
                     </div>
-                    <DropdownList open={codeSuggestOpen} root={codeSuggestRef} label="Course suggestions">
-                      {liveDown && (
+                    <SuggestList open={codeSuggestOpen} root={codeSuggestRef} label="Course suggestions"
+                      notice={liveDown && (
                         <div className="dropdown-status" style={{ color: UI.warn }}>
                           <AlertTriangle size={13} />Live catalog unavailable. Using offline catalog.
                         </div>
                       )}
-                      {codeSuggestLoading && codeSuggestions.length === 0 && (
-                        <div className="dropdown-status">
-                          <Loader2 size={13} className="animate-spin" />{liveDown ? "Loading offline catalog" : "Searching live course catalog"}&hellip;
-                        </div>
-                      )}
-                      {liveDown && !codeSuggestLoading && codeSuggestions.length === 0 && (
-                        <div className="dropdown-status">No matching courses.</div>
-                      )}
-                      {codeSuggestions.map((s) => (
-                        <div key={s.type + s.code} role="option" className="dropdown-option is-stacked"
-                          onMouseDown={(e) => e.preventDefault()} onClick={() => pickCodeSuggestion(s)}>
-                          <div>{s.code}</div>
-                          <small>{s.type === "subject" ? s.description : s.title}</small>
-                        </div>
-                      ))}
-                    </DropdownList>
+                      loading={codeSuggestLoading} loadingText={liveDown ? "Loading offline catalog" : "Searching courses"}
+                      emptyText={liveDown && "No matching courses."}
+                      items={codeSuggestions} itemKey={(s) => s.type + s.code} onPick={pickCodeSuggestion}
+                      title={(s) => s.code} detail={(s) => (s.type === "subject" ? s.description : s.title)} />
                   </div>
                 </Field>
               </div>
@@ -2893,15 +2848,10 @@ export default function SyllabusBuilder() {
                     {lookupStatus === "error" &&
                       <X size={15} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: UI.warn }} />}
                     </div>
-                    <DropdownList open={sectionSuggestOpen} root={sectionSuggestRef} label="Section suggestions">
-                      {sectionSuggestions.map((s) => (
-                        <div key={s.crn} role="option" className="dropdown-option is-stacked"
-                          onMouseDown={(e) => e.preventDefault()} onClick={() => pickSectionSuggestion(s)}>
-                          <div>Section {s.section}</div>
-                          <small>{s.meeting} &middot; {s.instructor}</small>
-                        </div>
-                      ))}
-                    </DropdownList>
+                    <SuggestList open={sectionSuggestOpen} root={sectionSuggestRef} label="Section suggestions"
+                      loading={sectionSuggestLoading} loadingText="Searching sections" emptyText="Not offered this term"
+                      items={sectionSuggestions} itemKey={(s) => s.crn} onPick={pickSectionSuggestion}
+                      title={(s) => `Section ${s.section}`} detail={(s) => <>{s.meeting} &middot; {s.instructor}</>} />
                   </div>
                 </Field>
               </div>
@@ -3195,7 +3145,7 @@ export default function SyllabusBuilder() {
           {tab === 7 && (<>
             <H>Course policies</H>
             <Field label="Attendance">
-              <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample attendance policy"
+              <SampleRows label="Sample attendance policy" current={d.attendance}
                 options={[
                   ["Graded",
                     'Attendance in this course means that you will be present for all in-person class meetings. Roll will be called/marked at the beginning of each class period. If you are not present during roll call, it is your responsibility to see the professor after class so that you may be marked tardy; otherwise, you will be marked absent for the day. If you need to miss class for a valid reason (school events, family matters, appointments, etc.) you must notify the professor in advance of your absence, or as near as possible to the class period in the event of emergencies. You need not be detailed, a simple "I am out sick today" will suffice!'
@@ -3220,7 +3170,7 @@ export default function SyllabusBuilder() {
               />
             </Field> 
             <Field label="What engagement looks like here" hint="optional, but it removes a lot of guesswork">
-              <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample engagement policy"
+              <SampleRows label="Sample engagement policy" current={d.participation}
                 options={[
                   [
                     "Discussion & Q&A",
@@ -3252,8 +3202,8 @@ export default function SyllabusBuilder() {
               />
             </Field>
             <Field label="Late work and make-up" hint="choose a sample, then edit as needed">
-              <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample late work policy"
-                options={LATE_POLICIES.map((policy) => ({ value: policy.label, label: policy.label }))}
+              <SampleRows label="Sample late work policy" current={d.late}
+                options={LATE_POLICIES.map((policy) => ({ value: policy.label, label: policy.label, text: policy.text }))}
                 onChange={async (v) => {
                   const sample = LATE_POLICIES.find((policy) => policy.label === v);
                   if (d.late.trim() && !(await askConfirm({ title: "Replace your late work policy?", text: "The sample will replace what you've written.", action: "Replace" }))) return;
@@ -3265,8 +3215,8 @@ export default function SyllabusBuilder() {
             {d.lateAdditional.map((policy, i) => (
               <CardField key={i} data-box-key="lateAdditional" data-box-index={i} label="Another late work policy"
                 onRemove={() => drop("lateAdditional", i)} removeLabel={`Remove late work policy ${i + 2}`}>
-                <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample late work policy"
-                  options={LATE_POLICIES.map((option) => ({ value: option.label, label: option.label }))}
+                <SampleRows label="Sample late work policy" current={policy.text}
+                  options={LATE_POLICIES.map((option) => ({ value: option.label, label: option.label, text: option.text }))}
                   onChange={async (v) => {
                     const sample = LATE_POLICIES.find((option) => option.label === v);
                     if (policy.text.trim() && !(await askConfirm({ title: "Replace this late work policy?", text: "The sample will replace what you've written.", action: "Replace" }))) return;
@@ -3284,21 +3234,30 @@ export default function SyllabusBuilder() {
               so pick one of its three tiers below or write your own.
             </Caption>
             <div className="choice-list" role="radiogroup" aria-label="AI policy tier">
-              {Object.entries(AI_POLICIES).map(([k, v]) => (
-                <label key={k} className="choice-row">
-                  <input type="radio" name="ai" checked={d.aiTier === k} onChange={() => set("aiTier", k)} />
-                  <span style={{ flex: 1 }}>{v.label}</span>
-                  {d.aiTier === k && <Check size={17} strokeWidth={2.5} aria-hidden="true" style={{ color: UI.orangeText, flexShrink: 0 }} />}
-                </label>
-              ))}
+              {Object.entries(AI_POLICIES).map(([k]) => {
+                const [title, desc] = AI_TIER_TEXT[k];
+                return (
+                  <label key={k} className="choice-row" onMouseDown={(e) => e.preventDefault()}>
+                    <input type="radio" name="ai" checked={d.aiTier === k} onChange={() => set("aiTier", k)} />
+                    <span className="choice-text"><span>{title}</span><span className="choice-desc">{desc}</span></span>
+                    {d.aiTier === k && <Check size={17} strokeWidth={2.5} aria-hidden="true" className="check-draw" style={{ color: UI.orangeText, flexShrink: 0 }} />}
+                  </label>
+                );
+              })}
+              {/* "write my own" opens its text box right here, under the option */}
+              <div className={`choice-more${d.aiTier === "custom" ? " is-open" : ""}`} inert={d.aiTier === "custom" ? undefined : ""}>
+                <div>
+                  <A rows={7} value={d.aiCustom} onChange={(v) => set("aiCustom", v)}
+                    placeholder="Your policy must still affirm academic honesty and state that unpermitted AI use is academic misconduct under the Student Code of Conduct." />
+                </div>
+              </div>
+              <SlideHighlight />
             </div>
-            {d.aiTier === "custom" && <CardField label="Your AI policy"><A rows={7} value={d.aiCustom} onChange={(v) => set("aiCustom", v)}
-              placeholder="Your policy must still affirm academic honesty and state that unpermitted AI use is academic misconduct under the Student Code of Conduct." /></CardField>}
             <div className="mt-4"><Field label="A note from your professor" hint="optional warm box, sits under the policy">
               <A rows={3} value={d.profNote} onChange={(v) => set("profNote", v)} placeholder="If you are ever unsure whether what you are submitting crosses that line, reach out before you submit. That conversation is always easier before the fact than after." /></Field></div>
             <div className="section-title">Additional policies</div>
             {d.customPolicies.map((policy, i) => (
-              <CardField key={i} title={policy.title} onTitle={(v) => setDeep("customPolicies", i, "title", v)}
+              <CardField key={i} data-box-key="customPolicies" data-box-index={i} title={policy.title} onTitle={(v) => setDeep("customPolicies", i, "title", v)}
                 titlePlaceholder="Policy title, like Classroom conduct" titleLabel={`Custom policy ${i + 1} title`}
                 onRemove={() => drop("customPolicies", i)} removeLabel={`Remove custom policy ${i + 1}`}>
                 <A rows={3} value={policy.text} onChange={(v) => setDeep("customPolicies", i, "text", v)} placeholder="Describe your expectations for students." />
@@ -3314,15 +3273,20 @@ export default function SyllabusBuilder() {
             </Caption>
             {Object.entries(LOCKED).map(([k, v]) => {
               const full = fullPolicies.includes(k);
+              const showsLess = full && !policyClosing.includes(k); // what the button says
               return (
                 <div key={k} className={`group-box${d.inc[k] ? "" : " is-off"}`}>
                   <SwitchRow checked={d.inc[k]} onChange={(on) => set("inc", { ...d.inc, [k]: on })}>
                     <span className="policy-title">{v.title}<Lock size={12} aria-label="CTL-maintained language" /></span>
                   </SwitchRow>
-                  <div className={`policy-text${full ? " is-full" : ""}`}>{v.text}</div>
-                  <button type="button" className="policy-more" aria-expanded={full}
-                    onClick={() => setFullPolicies((f) => (full ? f.filter((x) => x !== k) : [...f, k]))}>
-                    {full ? "Show less" : "Show more"}
+                  <div ref={(el) => { policyTextRefs.current[k] = el; }} className={`policy-text${full ? " is-full" : ""}`}>{v.text}</div>
+                  <button type="button" className="policy-more" aria-expanded={showsLess}
+                    onMouseDown={(e) => e.preventDefault()} onClick={() => togglePolicy(k)}>
+                    {/* "more" morphs into "less" in place */}
+                    Show <span className="label-swap">
+                      <span aria-hidden={showsLess}>more</span>
+                      <span aria-hidden={!showsLess}>less</span>
+                    </span>
                   </button>
                 </div>
               );
@@ -3452,10 +3416,10 @@ export default function SyllabusBuilder() {
             {tab === 10 && (<>
             <H>Lab component</H>
             <div className="group-box">
-              <SwitchRow checked={d.hasLab} onChange={(on) => set("hasLab", on)}>This course has a lab</SwitchRow>
+              <SwitchRow checked={d.hasLab && !labLeaving} onChange={toggleLab}>This course has a lab</SwitchRow>
               <div className="group-note">Adds a Laboratory Component section to the syllabus.</div>
             </div>
-            {d.hasLab && (<>
+            {d.hasLab && (<div ref={stairRef} className={labLeaving ? "stair-leave" : labReveal ? "stair-reveal" : undefined} onAnimationEnd={(e) => { if (e.target.parentElement === e.currentTarget && !e.target.nextElementSibling) setLabReveal(false); }}>
               <Caption>
                 Students always ask three things about a lab: does it count toward my grade, what if I miss one, and what do I bring.
                 Answering them here saves you the emails.
@@ -3477,7 +3441,7 @@ export default function SyllabusBuilder() {
               <Field label="Lab safety" hint="required"><A rows={4} value={d.lab.safety} onChange={(v) => setLab("safety", v)} placeholder="Your safety rules, any training students must complete before the first lab, and what happens if the rules are not followed." /></Field>
               <Field label="Supplies and protective equipment"><A rows={3} value={d.lab.supplies} onChange={(v) => setLab("supplies", v)} placeholder="Lab notebook, closed-toe shoes, goggles (available at the bookstore)." /></Field>
               <Field label="Missed labs and make-up"><A rows={3} value={d.lab.makeup} onChange={(v) => setLab("makeup", v)} /></Field>
-            </>)}
+            </div>)}
           </>)}
 
 
@@ -3518,6 +3482,7 @@ export default function SyllabusBuilder() {
                         ))}
                         <div className="detail-text"><b>Why it matters.</b> {c.why}</div>
                         <div className="detail-text"><b>How to fix.</b> {c.fix}</div>
+                        <SlideHighlight />
                       </div>
                     )}
                   </div>
@@ -3555,7 +3520,7 @@ export default function SyllabusBuilder() {
                 const toggle = () => setOpenChecks((o) => (open ? o.filter((w) => w !== where) : [...o, where]));
                 return (
                   <ExpandRow key={where} open={open} onToggle={toggle} label={where}
-                    summary={open ? `${missing.length} missing` : missing.join(", ")}>
+                    summary={missing.join(", ")} openSummary={`${missing.length} missing`}>
                     {missing.map((label) => (
                       <button key={label} className="list-item" onClick={() => setTab(tabIndex(where))}>
                         <span style={{ flex: 1 }}>{label}</span>
@@ -3589,17 +3554,24 @@ export default function SyllabusBuilder() {
         </div>
 
         {/* preview */}
-        <div role="region" aria-label="Preview" className={previewFullscreen ? "" : `p-5 app-panel editor-preview${previewOpen ? "" : " is-hidden"}`} style={previewFullscreen
-          ? { position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", background: UI.wash }
-          : { flex: "1 1 460px", minWidth: 360 }}>
-          <div className="flex items-center justify-end gap-3 mb-2" style={{
-            color: UI.slate, fontSize: 13,
-            ...(previewFullscreen ? { background: UI.paper, borderBottom: `1px solid ${UI.line}`, padding: "12px 20px", marginBottom: 0 } : {}),
-          }}>
+        <div role="region" aria-label="Preview" className={previewFullscreen ? "" : "p-5 app-panel editor-preview"} style={previewFullscreen
+          ? { position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", background: UI.wash, viewTransitionName: "preview-panel" }
+          : { flex: "1 1 460px", minWidth: 360, viewTransitionName: "preview-panel" }}>
+          <div className={previewFullscreen ? undefined : "preview-body"} style={previewFullscreen
+            ? { flex: 1, minHeight: 0, overflow: "auto", padding: "24px clamp(16px, 5vw, 72px)", viewTransitionName: "preview-doc" }
+            : { viewTransitionName: "preview-doc" }}>
+            <PagedPreview ref={previewRef} css={PREVIEW_CSS} fullscreen={previewFullscreen} theme={theme}
+              zoom={previewZoom} onScale={setPreviewScale}
+              pageClass={showPrinted ? "doc-preview" : "doc-preview themed"}
+              html={docBody || `<p class="soft">Start on the left. The document builds itself here.</p>`} />
+          </div>
+          {/* controls along the bottom: buttons on the left, zoom in the middle */}
+          <div className="preview-bar" style={previewFullscreen
+            ? { background: UI.paper, borderTop: `1px solid ${UI.line}`, padding: "10px 20px", marginTop: 0 } : undefined}>
             <div className="icon-group">
-              {theme === "dark" && (
+              {theme !== "light" && (
                 <button type="button" className="icon-button" onClick={() => changeLook(() => setShowPrinted((on) => !on))} aria-pressed={showPrinted}
-                  aria-label="Show as printed" title={showPrinted ? "Back to the dark preview" : "Show as printed (exports always print in light colors)"}>
+                  aria-label="Show as printed" title={showPrinted ? "Back to the themed preview" : "Show as printed (exports always print on white)"}>
                   <Printer size={16} />
                 </button>
               )}
@@ -3607,25 +3579,21 @@ export default function SyllabusBuilder() {
                 aria-label="Text keybinds" title="Text formatting keybinds">
                 <Keyboard size={16} />
               </button>
-              <button type="button" className="icon-button" onClick={() => setPreviewFullscreen((f) => !f)} aria-pressed={previewFullscreen}
+              <button type="button" className="icon-button" onClick={() => toggleFullscreen()} aria-pressed={previewFullscreen}
                 aria-label={previewFullscreen ? "Exit fullscreen preview" : "Fullscreen preview"}
                 title={previewFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen preview"}>
                 {previewFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
-              {!previewFullscreen && (
-                <button type="button" className="icon-button" onClick={() => setPreviewOpen(false)}
-                  aria-label="Hide preview" title="Hide the preview">
-                  <PanelRightClose size={16} />
-                </button>
-              )}
             </div>
-          </div>
-          <div style={previewFullscreen
-            ? { flex: 1, minHeight: 0, overflow: "auto", padding: "24px clamp(16px, 5vw, 72px)" }
-            : {}}>
-            <PagedPreview ref={previewRef} css={PREVIEW_CSS} fullscreen={previewFullscreen} dark={theme === "dark"}
-              pageClass={showPrinted ? "doc-preview" : "doc-preview themed"}
-              html={docBody || `<p class="soft">Start on the left. The document builds itself here.</p>`} />
+            <div className="icon-group zoom-control">
+              <input type="range" className="zoom-slider" min={50} max={200} step={5} aria-label="Zoom"
+                value={Math.round(previewScale * 100)} onChange={(e) => setPreviewZoom(Number(e.target.value) / 100)}
+                style={{ "--fill": `${Math.max(0, Math.min(100, ((previewScale * 100 - 50) / 150) * 100))}%` }} />
+              <button type="button" className="zoom-level" onClick={() => setPreviewZoom(null)} aria-pressed={previewZoom === null}
+                title={previewZoom === null ? "Fit to width" : "Back to fit to width"}>
+                {Math.round(previewScale * 100)}%
+              </button>
+            </div>
           </div>
         </div>
       </div>

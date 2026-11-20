@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Check } from "lucide-react";
-import { UI, inputBase } from "./ui.js";
+import { Check, Loader2 } from "lucide-react";
+import { UI, inputBase, reduceMotion, useDismiss, glideHeight, stairRef } from "./ui.js";
 
 // draws the pill + dripping panel as one shape, redrawn every frame
 // H and r have to match the 44px field height in index.css
@@ -16,7 +16,8 @@ export function MeltShape({ root }) {
       const W = f.width, H = 44, r = 22;
       const ph = Math.max(0, m.bottom - f.top - H); // how far it's dripped
       const full = more.firstElementChild?.scrollHeight || ph || 1;
-      const e = Math.min(1, ph / full); // 0 to 1
+      // a resize animation (results changed while open) isn't a drip, so keep the shape settled
+      const e = more.getAnimations?.().some((a) => a.id === "resize") ? 1 : Math.min(1, ph / full); // 0 to 1
       // curves only move one way or the shape jitters
       const x0 = Math.max(r, m.left - f.left);
       const R = 22 - 4 * e;
@@ -45,11 +46,13 @@ export function SlideHighlight({ active }) {
   const ref = useRef(null);
   const [box, setBox] = useState(null);
   const shown = useRef(false); // first time it jumps instead of sliding
-  const place = (el) => setBox(el && el.classList.contains("dropdown-option") ? { top: el.offsetTop, h: el.offsetHeight } : null);
+  // works for dropdown options and the clickable rows inside the rows that open (not the plain "done" ones)
+  const ITEM = ".dropdown-option, button.list-item, label.choice-row";
+  const place = (el) => setBox(el && el.matches?.(ITEM) ? { top: el.offsetTop, h: el.offsetHeight } : null);
   useEffect(() => {
     const list = ref.current?.parentElement;
     if (!list) return undefined;
-    const over = (e) => { const o = e.target.closest?.(".dropdown-option"); if (o && list.contains(o)) place(o); };
+    const over = (e) => { const o = e.target.closest?.(ITEM); if (o && list.contains(o)) place(o); };
     const out = () => { if (active == null) setBox(null); };
     list.addEventListener("mouseover", over);
     list.addEventListener("mouseleave", out);
@@ -92,13 +95,43 @@ export function followOpen(root) {
 // the part that opens (shape, list, highlight), also used by the autofill lists
 export function DropdownList({ open, root, label, maxHeight = 260, listRef, active, children }) {
   useEffect(() => (open ? followOpen(root.current) : undefined), [open, root]);
+  // when the results change while it's open, glide to the new size instead of jumping
+  const moreRef = useRef(null);
+  const innerRef = useRef(null);
+  const openedAt = useRef(0);
+  useEffect(() => { openedAt.current = performance.now(); }, [open]);
+  useEffect(() => {
+    const more = moreRef.current, inner = innerRef.current;
+    if (!more || !inner) return undefined;
+    let last = null;
+    const ro = new ResizeObserver(() => {
+      // if it's mid-glide, start the next one from where it is now (not from the old target), so it never jumps
+      const running = more.getAnimations().filter((a) => a.id === "resize"); // not the open/close drip
+      const now = running.length ? more.getBoundingClientRect().height : last;
+      running.forEach((a) => a.cancel());
+      const to = more.getBoundingClientRect().height;
+      last = to;
+      if (now == null || !open || performance.now() - openedAt.current < 350) return; // the open/close drip handles itself
+      if (Math.abs(now - to) < 1) return;
+      // height only: animating width too makes the text re-wrap every frame
+      glideHeight(more, now, to, { id: "resize", duration: 220 });
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [open]);
+  const setList = (el) => {
+    innerRef.current = el;
+    stairRef(el);
+    if (typeof listRef === "function") listRef(el); else if (listRef) listRef.current = el;
+  };
   return (
     <>
       <MeltShape root={root} />
       {/* 0fr -> 1fr animates the height */}
-      <div className="dropdown-more" inert={open ? undefined : ""}>
+      <div ref={moreRef} className="dropdown-more" inert={open ? undefined : ""}>
         <div>
-          <div ref={listRef} role="listbox" aria-label={label} className="dropdown-list" style={{ maxHeight }}>
+          {/* stair-reveal stays on while open, so results that arrive later still step in */}
+          <div ref={setList} role="listbox" aria-label={label} className={`dropdown-list${open ? " stair-reveal" : ""}`} style={{ maxHeight }}>
             {children}
             <SlideHighlight active={active} />
           </div>
@@ -108,10 +141,30 @@ export function DropdownList({ open, root, label, maxHeight = 260, listRef, acti
   );
 }
 
-export function MorphChevron({ open }) {
+// autofill list under a text field: a spinner while searching, a note when nothing's found, two-line rows
+export function SuggestList({ open, root, label, notice, loading, loadingText, emptyText, items, itemKey, title, detail, onPick }) {
+  return (
+    <DropdownList open={open} root={root} label={label}>
+      {notice}
+      {/* shows even while the old results stay up, so a search always looks like it's running */}
+      {loading && <div className="dropdown-status"><Loader2 size={13} className="animate-spin" />{loadingText}&hellip;</div>}
+      {!loading && items.length === 0 && emptyText && <div className="dropdown-status">{emptyText}</div>}
+      {items.map((s) => (
+        <div key={itemKey(s)} role="option" className="dropdown-option is-stacked"
+          onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(s)}>
+          <div>{title(s)}</div>
+          <small>{detail(s)}</small>
+        </div>
+      ))}
+    </DropdownList>
+  );
+}
+
+// up: for menus that open upward, so it points up while closed
+export function MorphChevron({ open, up = false, size = 15 }) {
   const [progress, setProgress] = useState(open ? 1 : 0);
   useEffect(() => {
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduced = reduceMotion();
     if (reduced) {
       setProgress(open ? 1 : 0);
       return undefined;
@@ -155,13 +208,31 @@ export function MorphChevron({ open }) {
   }, [open]);
 
   const mix = (a, b) => a + (b - a) * progress;
-  const path = `M 5 ${mix(9, 15)} L 12 ${mix(15, 9)} L 19 ${mix(9, 15)}`;
+  const [a, b] = up ? [15, 9] : [9, 15];
+  const path = `M 5 ${mix(a, b)} L 12 ${mix(b, a)} L 19 ${mix(a, b)}`;
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"
       className="dropdown-chevron" style={{ color: open ? UI.orangeText : UI.muted, flexShrink: 0 }}>
       <path d={path} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+const startsAWord = (text, words) => {
+  const parts = text.toLowerCase().split(/[^a-z0-9]+/);
+  return words.every((w) => parts.some((p) => p.startsWith(w)));
+};
+function narrow(options, query) {
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const out = [];
+  let header = null, headerHit = false, headerShown = false;
+  for (const o of options) {
+    if (o.header) { header = o; headerHit = startsAWord(o.header, words); headerShown = false; continue; }
+    if (!headerHit && !startsAWord(o.label, words)) continue;
+    if (header && !headerShown) { out.push(header); headerShown = true; }
+    out.push(o);
+  }
+  return out;
 }
 
 export default function Dropdown({ value, onChange, options, placeholder = "", ariaLabel, editable = false,
@@ -171,15 +242,12 @@ export default function Dropdown({ value, onChange, options, placeholder = "", a
   const ref = useRef(null);
   const listRef = useRef(null);
   const hasOptions = options.some((o) => !o.header);
+  // editable lists narrow as you type: every word has to start a word in the option (or its group's header)
+  const [query, setQuery] = useState("");
+  const shown = editable && query.trim() ? narrow(options, query) : options;
   const selected = options.find((o) => !o.header && o.value === value);
-  const selectedIndex = selected ? options.indexOf(selected) : -1;
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDocDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", onDocDown);
-    return () => document.removeEventListener("mousedown", onDocDown);
-  }, [open]);
+  useDismiss(open, () => setOpen(false), ref);
 
 
   useEffect(() => {
@@ -191,17 +259,19 @@ export default function Dropdown({ value, onChange, options, placeholder = "", a
     else if (el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = el.offsetTop + el.offsetHeight - list.clientHeight;
   }, [open, active]);
 
-  const firstPickable = () => options.findIndex((o) => !o.header);
+  const firstPickable = () => shown.findIndex((o) => !o.header);
   const step = (from, dir) => {
-    for (let i = from + dir; i >= 0 && i < options.length; i += dir) if (!options[i].header) return i;
+    for (let i = from + dir; i >= 0 && i < shown.length; i += dir) if (!shown[i].header) return i;
     return from;
   };
   const openMenu = () => {
     if (!hasOptions) return;
-    setActive(selectedIndex >= 0 ? selectedIndex : editable ? -1 : firstPickable());
+    setQuery(""); // full list again, so find the picked one in options, not the narrowed list
+    const at = options.findIndex((o) => !o.header && o.value === value);
+    setActive(at >= 0 ? at : editable ? -1 : options.findIndex((o) => !o.header));
     setOpen(true);
   };
-  const pick = (o) => { onChange(o.value); setOpen(false); };
+  const pick = (o) => { onChange(o.value); setQuery(""); setOpen(false); };
 
   const onKeyDown = (e) => {
     if (!open) {
@@ -209,14 +279,14 @@ export default function Dropdown({ value, onChange, options, placeholder = "", a
       if (opens.includes(e.key) && hasOptions) { e.preventDefault(); openMenu(); }
       return;
     }
-    const last = options.length - 1;
+    const last = shown.length - 1;
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); }
     else if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (a < 0 ? firstPickable() : step(a, 1))); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => (a < 0 ? firstPickable() : step(a, -1))); }
     else if (e.key === "Home") { if (!editable) { e.preventDefault(); setActive(firstPickable()); } }
-    else if (e.key === "End") { if (!editable) { e.preventDefault(); setActive(options[last]?.header ? step(last, -1) : last); } }
+    else if (e.key === "End") { if (!editable) { e.preventDefault(); setActive(shown[last]?.header ? step(last, -1) : last); } }
     else if (e.key === "Enter" || (!editable && e.key === " ")) {
-      if (active >= 0 && options[active] && !options[active].header) { e.preventDefault(); pick(options[active]); }
+      if (active >= 0 && shown[active] && !shown[active].header) { e.preventDefault(); pick(shown[active]); }
       else if (editable) setOpen(false);
     }
     else if (e.key === "Tab") setOpen(false);
@@ -237,7 +307,7 @@ export default function Dropdown({ value, onChange, options, placeholder = "", a
               aria-label={ariaLabel}
               role="combobox"
               aria-expanded={open}
-              onChange={(e) => { onChange(e.target.value); setActive(-1); }}
+              onChange={(e) => { onChange(e.target.value); setQuery(e.target.value); setActive(-1); if (hasOptions) setOpen(true); }}
               onFocus={openMenu}
               onKeyDown={onKeyDown}
             />
@@ -264,16 +334,15 @@ export default function Dropdown({ value, onChange, options, placeholder = "", a
 
       {/* 0fr -> 1fr animates the height */}
       <DropdownList open={open} root={ref} label={ariaLabel} maxHeight={maxHeight} listRef={listRef} active={open ? active : -1}>
-        {options.map((o, i) => {
-          const stairIndex = options.slice(0, i).filter((option) => !option.header).length;
+        {shown.length === 0 && <div className="dropdown-status">No matches</div>}
+        {shown.map((o, i) => {
           if (o.header) {
-            return <div key={"h:" + o.header} role="presentation" className="dropdown-header"
-              style={{ "--stair-delay": `${stairIndex * 45}ms` }}>{o.header}</div>;
+            return <div key={"h:" + o.header} role="presentation" className="dropdown-header">{o.header}</div>;
           }
           const on = o.value === value;
           return (
             <div key={o.value} role="option" aria-selected={on}
-              className="dropdown-option" style={{ "--stair-delay": `${stairIndex * 45}ms` }}
+              className="dropdown-option"
               onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}>
               <span className="dropdown-check">{on && <Check size={16} strokeWidth={2.5} />}</span>
               {o.label}

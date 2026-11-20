@@ -1,4 +1,4 @@
-import React, { forwardRef, useLayoutEffect, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // the preview as real pages; the PDF prints these same pages so they always match
@@ -24,7 +24,7 @@ const SCREEN_CSS = `
   .preview-sizer{margin:0 auto}
   .preview-stack{display:flex;flex-direction:column;transform-origin:top left}
   .preview-page{border-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.1)}
-  :host(.is-dark) .preview-page{box-shadow:0 0 0 1px rgba(255,255,255,.08),0 8px 24px rgba(0,0,0,.35)} /* lighter so it doesn't blend into the dark panel */
+  :host(.tone-dark) .preview-page{box-shadow:0 0 0 1px rgba(255,255,255,.08),0 8px 24px rgba(0,0,0,.35)} /* lighter so it doesn't blend into the dark panel */
   .page-number{position:absolute;top:100%;left:0;right:0;padding-top:3px;text-align:center;
     font:12px -apple-system,BlinkMacSystemFont,Inter,sans-serif;color:var(--muted)}
 `;
@@ -37,10 +37,13 @@ export const pagesHtml = (html, count, pageClass) => Array.from({ length: count 
   `<div class="preview-page ${pageClass}"><div class="page-clip"><div class="page-flow" style="transform:translateX(${-k * STRIDE}px)">${html}</div></div></div>`
 ).join("");
 
-const PagedPreview = forwardRef(function PagedPreview({ html, css, pageClass, fullscreen, dark }, ref) {
+// zoom: null fits the pages to the width, a number is the size (1 = real size); onScale hears the size in use
+const PagedPreview = forwardRef(function PagedPreview({ html, css, pageClass, fullscreen, theme, zoom = null, onScale }, ref) {
   const [root, setRoot] = useState(null);
   const [pages, setPages] = useState(1);
-  const [scale, setScale] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
+  const scale = zoom ?? fitScale;
+  useEffect(() => { onScale?.(scale); }, [scale]); // eslint-disable-line react-hooks/exhaustive-deps
   const hostRef = useRef(null);
   const firstFlowRef = useRef(null);
 
@@ -65,18 +68,19 @@ const PagedPreview = forwardRef(function PagedPreview({ html, css, pageClass, fu
   useLayoutEffect(() => {
     const el = hostRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const fit = () => { if (el.clientWidth) setScale(Math.min(1, (el.clientWidth - 24) / PAGE_W)); };
+    const fit = () => { if (el.clientWidth) setFitScale(Math.min(1, (el.clientWidth - 24) / PAGE_W)); };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // the shadow root can't see the page theme, so point the dark rules at the host
-  const shadowCss = SCREEN_CSS + (css + PAGE_CSS).replaceAll('[data-theme="dark"]', ":host(.is-dark)");
+  // the shadow root can't see the page theme, so point the theme rules at the host ("+" isn't allowed in a class)
+  const tone = (t) => `tone-${t.replace("+", "-plus")}`;
+  const shadowCss = SCREEN_CSS + (css + PAGE_CSS).replace(/\[data-theme="([^"]+)"\]/g, (_, t) => `:host(.${tone(t)})`);
   const fullHeight = pages * PAGE_H + (pages - 1) * PAGE_GAP + 24; // + room for the page number
   return (
-    <div ref={setHost} className={`preview-pages${fullscreen ? " is-fullscreen" : ""}${dark ? " is-dark" : ""}`}>
+    <div ref={setHost} className={`preview-pages${fullscreen ? " is-fullscreen" : ""}${theme ? ` ${tone(theme)}` : ""}`}>
       {root && createPortal(
         <>
           <style>{shadowCss}</style>

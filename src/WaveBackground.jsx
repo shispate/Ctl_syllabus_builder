@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { reduceMotion as prefersReducedMotion } from "./ui.js";
 
 // Glass's wave background, ported from fun-redesign-2. Runs on the graphics card,
 // and three.js only downloads when Glass is on.
@@ -86,7 +87,7 @@ export default function WaveBackground({ light = false, onSoftwareGraphics }) {
       .then((THREE) => {
         if (disposed) return;
         const canvas = canvasRef.current;
-        const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        const reduceMotion = prefersReducedMotion();
 
         let renderer;
         try {
