@@ -13,20 +13,26 @@ export function MeltShape({ root }) {
     if (!field || !more) return undefined;
     const draw = () => {
       const f = field.getBoundingClientRect(), m = more.getBoundingClientRect();
-      const W = f.width, H = 44, r = 22;
+      const W = f.width, H = 44;
+      // follow the row's own corners: a pill on its own, square or card-rounded inside a group
+      const cs = getComputedStyle(field);
+      const corner = (v) => Math.min(H / 2, parseFloat(v) || 0);
+      const tl = corner(cs.borderTopLeftRadius), tr = corner(cs.borderTopRightRadius);
+      const bl = corner(cs.borderBottomLeftRadius), br = corner(cs.borderBottomRightRadius);
       const ph = Math.max(0, m.bottom - f.top - H); // how far it's dripped
       const full = more.firstElementChild?.scrollHeight || ph || 1;
       // a resize animation (results changed while open) isn't a drip, so keep the shape settled
       const e = more.getAnimations?.().some((a) => a.id === "resize") ? 1 : Math.min(1, ph / full); // 0 to 1
       // curves only move one way or the shape jitters
-      const x0 = Math.max(r, m.left - f.left);
-      const R = 22 - 4 * e;
+      const x0 = Math.max(bl, m.left - f.left);
+      const R = br + (18 - br) * e; // the row's corner while closed, the list's 18px corner once open
       // elliptical or the start shows a sharp step
       const b = 18 + 14 * (1 - e), by = Math.min(b, ph / 2);
-      const c = Math.min(x0 - r, 16 + 12 * (1 - e)), cy = Math.min(c, ph / 2);
+      const c = Math.min(x0 - bl, 16 + 12 * (1 - e)), cy = Math.min(c, ph / 2);
       const y = H + ph;
-      setShape({ W, h: y, d: `M${r},0 H${W - r} A${r},${r} 0 0 1 ${W},${r} V${y - R} A${R},${R} 0 0 1 ${W - R},${y} `
-        + `H${x0 + b} A${b},${by} 0 0 1 ${x0},${y - by} V${H + cy} A${c},${cy} 0 0 0 ${x0 - c},${H} H${r} A${r},${r} 0 0 1 ${r},0 Z` });
+      setShape({ W, h: y, d: `M${tl},0 H${W - tr} A${tr},${tr} 0 0 1 ${W},${tr} V${y - R} A${R},${R} 0 0 1 ${W - R},${y} `
+        + `H${x0 + b} A${b},${by} 0 0 1 ${x0},${y - by} V${H + cy} A${c},${cy} 0 0 0 ${x0 - c},${H} `
+        + `H${bl} A${bl},${bl} 0 0 1 0,${H - bl} V${tl} A${tl},${tl} 0 0 1 ${tl},0 Z` });
     };
     draw();
     const ro = new ResizeObserver(draw);
@@ -47,7 +53,7 @@ export function SlideHighlight({ active }) {
   const [box, setBox] = useState(null);
   const shown = useRef(false); // first time it jumps instead of sliding
   // works for dropdown options and the clickable rows inside the rows that open (not the plain "done" ones)
-  const ITEM = ".dropdown-option, button.list-item, label.choice-row";
+  const ITEM = ".dropdown-option, button.list-item, label.choice-row, button.library-row";
   const place = (el) => setBox(el && el.matches?.(ITEM) ? { top: el.offsetTop, h: el.offsetHeight } : null);
   useEffect(() => {
     const list = ref.current?.parentElement;

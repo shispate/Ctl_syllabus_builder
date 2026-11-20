@@ -171,7 +171,7 @@ body { background: var(--wash); }
   background: var(--panel-bg);
   -webkit-backdrop-filter: var(--panel-blur);
   backdrop-filter: var(--panel-blur);
-  border: 1px solid var(--line);
+  border: 1px solid transparent; /* no outline (was var(--line)); stays 1px so nothing shifts */
   border-radius: 18px;
   box-shadow: var(--panel-shadow);
 }
@@ -256,7 +256,7 @@ body { background: var(--wash); }
 [data-theme="blue"] { --lg-tint: rgba(251, 244, 230, 0.38); }
 [data-theme="blue+"] { --lg-tint: rgba(247, 232, 204, 0.38); }
 [data-glass] :is(.editor-rail, .app-masthead) {
-  position: relative; border-color: var(--lg-rim-soft); background: var(--lg-tint);
+  position: relative; border-color: transparent; background: var(--lg-tint);
   -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
   box-shadow: var(--lg-edge), 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
 }
@@ -670,13 +670,26 @@ label.inset-row { cursor: text; }
   display: flex; align-items: center; gap: 12px; width: calc(100% - 16px); margin: 2px 8px 0; padding: 8px 10px; border: 0; border-radius: 14px;
   background: transparent; color: var(--ink); font-size: 14px; line-height: 1.4; text-align: left; cursor: pointer; transition: background 0.15s ease;
 }
-.library-row:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.library-row:disabled { cursor: default; color: var(--slate); }
+/* the sliding highlight does the hover; rows sit above it */
+.group-box.library { position: relative; }
+.group-box.library > .dropdown-slide { left: 8px; right: 8px; border-radius: 14px; }
+.library-row { position: relative; z-index: 1; }
+.library-text { flex: 1; transition: color 0.2s ease; }
+.library-row.is-added .library-text { color: var(--slate); }
 .library-row:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+/* the plus spins out as the check draws itself in (like the AI policy list), and the circle turns from orange to green */
 .library-add {
-  display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 999px;
+  position: relative; display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 999px;
   background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange-text);
+  transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease;
 }
+.library-add svg { position: absolute; transition: transform 0.3s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.2s ease; }
+.library-add .lib-check { opacity: 0; }
+.library-row.is-added .library-add { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.library-row.is-added .lib-plus { opacity: 0; transform: rotate(90deg) scale(0.3); }
+.library-row.is-added .lib-check { opacity: 1; }
+.library-row.is-added .lib-check path { stroke-dasharray: 24; stroke-dashoffset: -24; animation: check-draw 0.28s cubic-bezier(0.65, 0, 0.35, 1) 0.08s forwards; }
+.library-row:active .library-add { transform: scale(0.82); }
 
 /* university policies */
 .policy-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
@@ -936,3 +949,43 @@ button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--fiel
     animation-iteration-count: 1 !important;
   }
 }
+
+/* grouped rows, like iOS Settings: one card, rows share it, a hairline between them (kept last so it wins ties) */
+.editor-form .field-group { margin-bottom: 14px; border-radius: 18px; background: var(--field-bg); }
+.editor-form .field-group > .field { position: relative; margin: 0; border-radius: 0; background: transparent; }
+.editor-form .field-group > .field:first-child { border-radius: 18px 18px 0 0; }
+.editor-form .field-group > .field:last-child { border-radius: 0 0 18px 18px; }
+.editor-form .field-group > .field:only-child { border-radius: 18px; }
+.editor-form .field-group > .field + .field::before {
+  content: ""; position: absolute; top: 0; left: 18px; right: 0; height: 1px; background: var(--line); pointer-events: none;
+}
+/* dropdown rows keep the melt: its outline is their focus ring, and the open list floats over the rows below
+   (so the card doesn't stretch into an empty block); the shape is only filled while open, solid so rows don't show through */
+.editor-form .field-group > .field:not(:has([data-multiline])) .dropdown-more { position: absolute; top: 44px; right: 0; z-index: 2; }
+.editor-form .field-group > .field:has(.dropdown.is-open) { z-index: 3; }
+/* closing: stay on top and filled until the drip has pulled back (0.3s), or the rows show through it */
+.editor-form .field-group > .field { z-index: 1; transition: box-shadow 0.15s ease, z-index 0s linear 0.3s; } /* a number (not auto) so the step back down can wait */
+.editor-form .field-group > .field:has(.dropdown.is-open) { transition: box-shadow 0.15s ease, z-index 0s; }
+.editor-form .field-group .melt-shape path { fill: transparent; transition: stroke 0.15s ease, fill 0.2s ease 0.25s; } /* fades back as the drip finishes pulling in */
+.editor-form .field-group > .field:has(.dropdown.is-open) .melt-shape path { fill: var(--paper); transition: stroke 0.15s ease, fill 0.15s ease; }
+/* plain rows: the focus ring sits just inside the row */
+.editor-form .field-group > .field:not(:has([data-multiline])):not(:has(.dropdown)):focus-within { box-shadow: inset 0 0 0 1.5px var(--ring); }
+
+/* lists (Export, Accessibility) are one grouped card too, rows split by a hairline */
+.row-list { gap: 0; border-radius: 18px; background: var(--field-bg); }
+.row-list > :is(.list-row, .expand-group) { position: relative; border-radius: 0; background: transparent; }
+.row-list > :first-child { border-radius: 18px 18px 0 0; }
+.row-list > :last-child { border-radius: 0 0 18px 18px; }
+.row-list > :only-child { border-radius: 18px; }
+.row-list > button.list-row:hover, .row-list > .expand-group:has(> button.list-row:hover) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.row-list > * + *::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--line); pointer-events: none; z-index: 1; }
+.row-list > .list-row:focus-visible, .row-list > .expand-group > .list-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--ring); }
+.row-list > .expand-group > .list-row { border-radius: inherit; }
+
+/* rows inside a card (weight, due date) that sit together share one inset box */
+.inset-row { position: relative; }
+.inset-row + .inset-row { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+.inset-row:has(+ .inset-row) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.inset-row + .inset-row::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; height: 1px; background: var(--line); pointer-events: none; }
+/* a label that wraps to two lines gets room above and below instead of touching the hairlines */
+.editor-form .field-group > .field:not(:has([data-multiline])) .field-label { padding-block: 7px; }

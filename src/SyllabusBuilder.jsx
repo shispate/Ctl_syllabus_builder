@@ -1690,6 +1690,15 @@ export default function SyllabusBuilder() {
   });
 
   // the box fades and folds shut so the ones below slide up, then it's really removed
+  // outcome library picks: fill a blank outcome if there is one, otherwise grow a new box in.
+  // no scroll or focus like "Add outcome", so you can keep picking from the list
+  const addLibraryOutcome = (text) => {
+    const blank = d.outcomes.findIndex((o) => !o.trim());
+    if (blank >= 0) { setD((p) => ({ ...p, outcomes: p.outcomes.map((o, i) => (i === blank ? text : o)) })); return; }
+    flushSync(() => setD((p) => ({ ...p, outcomes: [...p.outcomes, text] })));
+    foldIn([...(formRef.current?.querySelectorAll('[data-box-key="outcomes"]') || [])].at(-1));
+  };
+
   const fadeOutDrop = (k, i) => {
     const box = formRef.current?.querySelector(`[data-box-key="${k}"][data-box-index="${i}"]`);
     if (box?.dataset.leaving) return;
@@ -2683,8 +2692,7 @@ export default function SyllabusBuilder() {
         <div ref={formRef} className="p-5 editor-form app-panel" style={{ flex: "1 1 400px", minWidth: 340 }}>
           {tab === 0 && (<>
             <H>Course</H>
-            <div className="flex gap-3 flex-wrap items-end">
-              <div style={{ flex: "1 1 150px" }}>
+            <div className="field-group">
                 <Field src="code" label="Course code">
                   <div ref={codeSuggestRef} className={`dropdown${codeSuggestOpen ? " is-open" : ""}`}>
                     <div className="dropdown-control">
@@ -2709,8 +2717,6 @@ export default function SyllabusBuilder() {
                       title={(s) => s.code} detail={(s) => (s.type === "subject" ? s.description : s.title)} />
                   </div>
                 </Field>
-              </div>
-              <div style={{ flex: "1 1 130px" }}>
                 <Field src="section" label="Section">
                   <div ref={sectionSuggestRef} className={`dropdown${sectionSuggestOpen ? " is-open" : ""}`}>
                     <div className="dropdown-control">
@@ -2737,16 +2743,10 @@ export default function SyllabusBuilder() {
                       title={(s) => `Section ${s.section}`} detail={(s) => <>{s.meeting} &middot; {s.instructor}</>} />
                   </div>
                 </Field>
-              </div>
-            </div>
-            <div className="flex gap-3 flex-wrap">
-              <div style={{ flex: "2 1 240px" }}><Field src="title" label="Course title"><T value={d.title} onChange={(v) => set("title", v)} placeholder="American Foreign Policy" /></Field></div>
-              <div style={{ flex: "0 0 100px" }}>
+              <Field src="title" label="Course title"><T value={d.title} onChange={(v) => set("title", v)} placeholder="American Foreign Policy" /></Field>
                 <Field src="crn" label="CRN"><T value={d.crn} onChange={(v) => set("crn", v.replace(/\D/g, "").slice(0, 5))} placeholder="12345" /></Field>
-              </div>
             </div>
-            <div className="flex gap-3 flex-wrap">
-              <div style={{ flex: "1 1 130px" }}>
+            <div className="field-group">
                 <Field src="term" label="Term" hint="used for the lookup too">
                   {/* terms come from Banner so new ones show up on their own */}
                   <Dropdown value={d.term} onChange={(v) => set("term", v)} placeholder="Select a term"
@@ -2756,9 +2756,7 @@ export default function SyllabusBuilder() {
                       return (d.term && !list.includes(d.term) ? [d.term, ...list] : list).map((t) => ({ value: t, label: t }));
                     })()} />
                 </Field>
-              </div>
-              <div style={{ flex: "1 1 130px" }}><Field src="credits" label="Credit hours"><T value={d.credits} onChange={(v) => set("credits", v)} /></Field></div>
-            </div>
+              <Field src="credits" label="Credit hours"><T value={d.credits} onChange={(v) => set("credits", v)} /></Field>
             <Field src="semester" label="Semester length" hint="students read this before they register">
               <Dropdown value={d.semester || ""} onChange={(v) => set("semester", v)} ariaLabel="Semester length" placeholder="Select semester length"
                 options={["Full Semester", "Half of a Semester", "Third of a Semester"].map((m) => ({ value: m, label: m }))} />
@@ -2767,6 +2765,8 @@ export default function SyllabusBuilder() {
               <Dropdown value={d.modality} onChange={(v) => set("modality", v)} ariaLabel="Delivery"
                 options={["In person", "Hybrid", "Online synchronous", "Online asynchronous", "Dual Enrollment", "Internship"].map((m) => ({ value: m, label: m }))} />
             </Field>
+            </div>
+            <div className="field-group">
             {/* the same days the Schedule tab dates its weeks from */}
             <Field src="meetDays" label="Meeting days" hint="leave blank if fully asynchronous">
               <DayPicker days={d.meetDays} onToggle={toggleDay} />
@@ -2780,6 +2780,8 @@ export default function SyllabusBuilder() {
             </Field>
             <Field src="location" label="Room"><T value={d.location} onChange={(v) => set("location", v)} placeholder="Humanities 407" /></Field>
             <Field src="exlocation" label="Other meeting room" hint="Only fill this if some classes take place in other room during the week"><T value={d.exlocation} onChange={(v) => set("exlocation", v)} placeholder="Humanities 409 on Fridays" /></Field>
+            </div>
+            <div className="field-group">
             <Field src="dept" label="Department" hint="type freely, or pick from the list">
               <Dropdown editable value={d.dept} onChange={(v) => set("dept", v)} placeholder="Department of Computer Science"
                 ariaLabel="Department" options={DEPARTMENTS.flatMap((g) => [
@@ -2788,6 +2790,7 @@ export default function SyllabusBuilder() {
                 ])} />
             </Field>
             <Field src="prereq" label="Prerequisites"><T value={d.prereq} onChange={(v) => set("prereq", v)} placeholder="None" /></Field>
+            </div>
           </>)}
 
           {tab === 1 && (<>
@@ -2796,13 +2799,17 @@ export default function SyllabusBuilder() {
               Office hours are the most under-used thing on a syllabus. Students who work shifts or commute from Dresden or Union City
               often can't make a midday block, so naming an alternative, even "email me and we'll find a time," changes who shows up.
             </Caption>
+            <div className="field-group">
             <Field src="instructor" label="Your name"><T value={d.instructor} onChange={(v) => set("instructor", v)} placeholder="Dr. Jane Doe" /></Field>
             <Field src="email" label="Email"><T value={d.email} onChange={(v) => set("email", v)} onBlur={() => {const email = d.email.trim(); set("email", email ? (email.endsWith("@") ? `${email}utm.edu` : email.includes("@") ? email : `${email}@utm.edu`) : "");}} placeholder="jdoe (autofills @utm.edu)" /></Field>
             <Field src="phone" label="Phone"><T type="tel" value={d.phone} onChange={(v) => set("phone", v)} placeholder="731-555-0123" /></Field>
             <Field src="office" label="Office"><T value={d.office} onChange={(v) => set("office", v)} placeholder="Humanities 212" /></Field>
+            </div>
             <Field src="hours" label="Office hours"><A rows={2} value={d.hours} onChange={(v) => set("hours", v)} placeholder="Monday and Wednesday, 10 a.m. to noon, and by appointment. Email me and we will find a time that works." /></Field>
-            <Field src="subjectLine" label="Email subject line you want" hint="cuts your response time"><T value={d.subjectLine} onChange={(v) => { subjectLineAutoRef.current = false; set("subjectLine", v); }} placeholder="POSC 322 - [your question]" /></Field>
-            <Field src="address" label="How students should address you"><T value={d.address} onChange={(v) => set("address", v)} placeholder="Dr. Doe" /></Field>
+            <div className="field-group">
+            <Field src="subjectLine" label="Email subject line" hint="cuts your response time"><T value={d.subjectLine} onChange={(v) => { subjectLineAutoRef.current = false; set("subjectLine", v); }} placeholder="POSC 322 - [your question]" /></Field>
+            <Field src="address" label="How to address you"><T value={d.address} onChange={(v) => set("address", v)} placeholder="Dr. Doe" /></Field>
+            </div>
           </>)}
 
           {tab === 2 && (<>
@@ -2848,22 +2855,26 @@ export default function SyllabusBuilder() {
 
             <div className="section-title">Outcome library</div>
             {OUTCOME_LIBRARY.map((g) => (
-              <div key={g.group} className="group-box" data-src="outcomeList">
+              <div key={g.group} className="group-box library" data-src="outcomeList">
                 <div className="group-head">{g.group}</div>
                 <div className="group-note" style={{ marginTop: 0 }}>{g.note}</div>
                 {g.items.map((it) => {
                   const added = d.outcomes.includes(it);
                   return (
-                    <button key={it} type="button" className="library-row" disabled={added}
-                      onClick={() => setD((p) => ({ ...p, outcomes: [...p.outcomes.filter((x) => x.trim()), it] }))}
-                      aria-label={added ? `Already added: ${it}` : `Add outcome: ${it}`}>
-                      <span style={{ flex: 1 }}>{it}</span>
-                      {added
-                        ? <Check size={16} strokeWidth={2.5} aria-hidden="true" style={{ color: UI.good, flexShrink: 0 }} />
-                        : <span className="library-add" aria-hidden="true"><Plus size={14} strokeWidth={2.5} /></span>}
+                    // a toggle: tap again to take it back out (it folds away like the trash button)
+                    <button key={it} type="button" className={`library-row${added ? " is-added" : ""}`} aria-pressed={added}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => (added ? fadeOutDrop("outcomes", d.outcomes.indexOf(it)) : addLibraryOutcome(it))}
+                      aria-label={added ? `Remove outcome: ${it}` : `Add outcome: ${it}`}>
+                      <span className="library-text">{it}</span>
+                      <span className="library-add" aria-hidden="true">
+                        <Plus size={14} strokeWidth={2.5} className="lib-plus" />
+                        <Check size={14} strokeWidth={3} className="lib-check" />
+                      </span>
                     </button>
                   );
                 })}
+                <SlideHighlight />
               </div>
             ))}
           </>)}
@@ -3196,6 +3207,7 @@ export default function SyllabusBuilder() {
 
           {tab === 9 && (<>
             <H>Schedule</H>
+            <div className="field-group">
             <Field src="scheduleType" label="Schedule format">
               <Dropdown value={d.scheduleType || "weekly"} ariaLabel="Schedule format"
                 options={[
@@ -3220,6 +3232,7 @@ export default function SyllabusBuilder() {
             <Field src="classDays" label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
               <DayPicker days={d.meetDays} onToggle={toggleDay} />
             </Field>
+            </div>
             {auto ? (
               <Caption>
                 Weeks and dates come from the days you picked. Holidays on those days are marked "No class." Fill in topics and due dates below.
@@ -3326,10 +3339,9 @@ export default function SyllabusBuilder() {
                 Students always ask three things about a lab: does it count toward my grade, what if I miss one, and what do I bring.
                 Answering them here saves you the emails.
               </Caption>
-              <div className="flex gap-3 flex-wrap">
-                <div style={{ flex: "1 1 130px" }}><Field src="lab.crn" label="Lab section / CRN"><T value={d.lab.crn} onChange={(v) => setLab("crn", v)} placeholder="12346" maxLength={5} /></Field></div>
-                <div style={{ flex: "2 1 220px" }}><Field src="lab.instructor" label="Lab instructor" hint="if different from you"><T value={d.lab.instructor} onChange={(v) => setLab("instructor", v)} /></Field></div>
-              </div>
+              <div className="field-group">
+                <Field src="lab.crn" label="Lab section / CRN"><T value={d.lab.crn} onChange={(v) => setLab("crn", v)} placeholder="12346" maxLength={5} /></Field>
+                <Field src="lab.instructor" label="Lab instructor" hint="if different from you"><T value={d.lab.instructor} onChange={(v) => setLab("instructor", v)} /></Field>
               <Field src="lab.meetDays" label="Lab meets on" hint="Select the days this lab meets">
                 <DayPicker days={d.lab.meetDays || []} onToggle={toggleLabDay} />
               </Field>
@@ -3337,6 +3349,7 @@ export default function SyllabusBuilder() {
                 <T value={d.lab.meeting} onChange={(v) => setLab("meeting", v)} placeholder="2:00 to 4:50 p.m." />
               </Field>
               <Field src="lab.location" label="Lab location"><T value={d.lab.location} onChange={(v) => setLab("location", v)} placeholder="Science Complex 118" /></Field>
+              </div>
               <Field src="lab.description" label="What happens in lab" hint="how it connects to lecture"><A rows={3} value={d.lab.description} onChange={(v) => setLab("description", v)} /></Field>
               <Field src="lab.gradeNote" label="How the lab counts toward the course grade" hint="separate grade, percent of the total, or must pass both"><A rows={3} value={d.lab.gradeNote} onChange={(v) => setLab("gradeNote", v)} placeholder="Lab is 25 percent of your final grade. Lab reports are graded within one week." /></Field>
               <Field src="lab.attendance" label="Lab attendance"><A rows={3} value={d.lab.attendance} onChange={(v) => setLab("attendance", v)} /></Field>
