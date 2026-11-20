@@ -875,7 +875,7 @@ button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--fiel
 .expand-chevron { flex: none; }
 .expand-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s ease; }
 .expand-group.is-open .expand-more { grid-template-rows: 1fr; }
-.expand-more > div { position: relative; overflow: hidden; display: flex; flex-direction: column; padding: 0 6px; }
+.expand-more > div { position: relative; overflow: hidden; display: flex; flex-direction: column; padding: 0 6px; transition: padding-bottom 0.25s ease; } /* the padding grows with the height, or it jumps 6px on the first frame */
 .expand-group.is-open .expand-more > div { padding-bottom: 6px; }
 .list-item {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px; border-radius: 12px; border: 0;
