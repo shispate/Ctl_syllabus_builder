@@ -873,7 +873,7 @@ label.inset-row { cursor: text; }
 .editor-preview .preview-pages { margin: 0 -20px 0 -10px; padding-right: 10px; padding-left: 10px; }
 
 /* export tab */
-.group-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 4px 0 6px 14px; }
+.group-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 4px 0 6px 16px; } /* 16px lines up with the list rows and captions below */
 .row-list { display: flex; flex-direction: column; gap: 4px; }
 .list-row {
   display: flex; align-items: center; gap: 12px; width: 100%; min-height: 36px; padding: 7px 16px;

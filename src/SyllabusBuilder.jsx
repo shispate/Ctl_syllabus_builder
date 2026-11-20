@@ -885,7 +885,7 @@ const Dialog = ({ onClose, labelId, width = 300, children }) => {
 };
 
 // gray helper text
-const Caption = ({ children }) => <div className="caption">{children}</div>;
+const Caption = ({ children, style }) => <div className="caption" style={style}>{children}</div>;
 
 // full-width add button (can take a different icon)
 const AddRow = ({ onClick, icon: I = Plus, children }) => (
@@ -3445,24 +3445,8 @@ export default function SyllabusBuilder() {
 
           {tab === tabIndex("Export") && (<>
             <H>Review and export</H>
-            <div className="export-actions" style={{ marginTop: 0 }}>
-              <button className="export-button" onClick={() => confirmThenExport(exportWord)}>
-                <span className="export-badge" aria-hidden="true"><FileText size={18} strokeWidth={1.75} /></span>
-                <span className="export-text"><b>Word</b><small>Keep editing it</small></span>
-                <Download size={16} className="export-arrow" aria-hidden="true" />
-              </button>
-              <button className="export-button" onClick={() => confirmThenExport(exportPdf)}>
-                <span className="export-badge" aria-hidden="true"><Printer size={18} strokeWidth={1.75} /></span>
-                <span className="export-text"><b>PDF</b><small>Choose Save as PDF</small></span>
-                <Download size={16} className="export-arrow" aria-hidden="true" />
-              </button>
-            </div>
-            <Caption>
-              Both come out in Cambria with the UT Martin banner and real heading styles, so screen readers can navigate them.
-              PDF opens your browser's print dialog. Nothing is saved anywhere, so export before you close this tab.
-            </Caption>
             {/* one row per tab, click to go there */}
-            <div className="group-title" style={{ marginTop: 20 }}>
+            <div className="group-title" style={{ marginTop: 0 }}>
               {passed === checks.length ? "Everything's ready" : `${checks.length - passed} left to finish`}
             </div>
             <div className="row-list">
@@ -3501,6 +3485,23 @@ export default function SyllabusBuilder() {
             {a11yFailCount + a11yWarnCount > 0 && (
               <Caption>Fixing accessibility issues is recommended, but you can still export.</Caption>
             )}
+            {/* export after you've checked what's left */}
+            <Caption style={{ marginTop: 24 }}>
+              Both come out in Cambria with the UT Martin banner and real heading styles, so screen readers can navigate them.
+              PDF opens your browser's print dialog. Nothing is saved anywhere, so export before you close this tab.
+            </Caption>
+            <div className="export-actions" style={{ marginTop: 10 }}>
+              <button className="export-button" onClick={() => confirmThenExport(exportWord)}>
+                <span className="export-badge" aria-hidden="true"><FileText size={18} strokeWidth={1.75} /></span>
+                <span className="export-text"><b>Word</b><small>Keep editing it</small></span>
+                <Download size={16} className="export-arrow" aria-hidden="true" />
+              </button>
+              <button className="export-button" onClick={() => confirmThenExport(exportPdf)}>
+                <span className="export-badge" aria-hidden="true"><Printer size={18} strokeWidth={1.75} /></span>
+                <span className="export-text"><b>PDF</b><small>Choose Save as PDF</small></span>
+                <Download size={16} className="export-arrow" aria-hidden="true" />
+              </button>
+            </div>
             <button className="destructive-row" onClick={clearForm}>Clear form</button>
           </>)}
         </div>
