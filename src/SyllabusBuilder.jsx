@@ -425,6 +425,24 @@ const buildWeekDates = (startDate, count = 15) => {
 };
 
 /* ---------- weight helpers ---------- */
+// grading scale: each letter's range runs from its cutoff up to just under the next letter's
+const SCALE_LETTERS = ["A", "B", "C", "D"];
+const scaleCut = (cuts, letter) => (String(cuts[letter] ?? "").trim() === "" ? NaN : Number(cuts[letter]));
+const scaleValid = (cuts) => SCALE_LETTERS.every((L, i) => {
+  const n = scaleCut(cuts, L);
+  return Number.isFinite(n) && n > 0 && n <= 100 && (i === 0 || n < scaleCut(cuts, SCALE_LETTERS[i - 1]));
+});
+const scaleRows = (cuts) => {
+  let top = 100;
+  const rows = SCALE_LETTERS.map((L) => {
+    const low = scaleCut(cuts, L);
+    const row = [L, low === top ? `${low}` : `${low}–${top}`];
+    top = low - 1;
+    return row;
+  });
+  return [...rows, ["F", `below ${scaleCut(cuts, "D")}`]];
+};
+
 const parseWeight = (s) => {
   // Strip "%", whitespace, letters so "20%", " 20 ", "20 percent" → 20
   const n = parseFloat(String(s ?? "").replace(/[^\d.\-]/g, ""));
@@ -540,7 +558,7 @@ const createBlank = () => ({
   extraMaterials: [],
   gradingMethod: "percentage",
   items: [{ name: "", weight: "", points: "", due: "", desc: "", slos: [] }],
-  scale: "A 90 to 100  ·  B 80 to 89  ·  C 70 to 79  ·  D 60 to 69  ·  F below 60",
+  scaleCuts: { A: "90", B: "80", C: "70", D: "60" }, // lowest percent for each letter; F is below D
   attendance: "", late: "", lateSample: "", lateAdditional: [], participation: "",
   aiTier: "mixed", aiCustom: "", profNote: "", customPolicies: [],
   inc: { integrity: true, accessibility: true, support: true, crisis: true, changes: true },
@@ -1905,7 +1923,7 @@ export default function SyllabusBuilder() {
         : validPoints,
       "Grading",
     ],
-    ["Grading scale", hasText(d.scale), "Grading"],
+    ["Grading scale", scaleValid(d.scaleCuts), "Grading"],
     ["Attendance policy", hasText(d.attendance), "Policies"],
     ["Late work and make-up policy", hasText(lateText), "Policies"],
     ["AI policy (required by UTM policy)", hasText(aiText), "Policies"],
@@ -1956,7 +1974,6 @@ export default function SyllabusBuilder() {
       f("Materials", "Access details", d.materials.acquire),
       ...d.extraMaterials.map((x, i) => f("Materials", titled("Material section", i, x.title), x.description)),
       ...d.items.map((x, i) => f("Grading", `${x.name?.trim() || `Assignment ${i + 1}`} description`, x.desc)),
-      f("Grading", "Grading scale", d.scale),
       f("Policies", "Attendance", d.attendance),
       f("Policies", "What engagement looks like here", d.participation),
       f("Policies", "Late work and make-up", d.late),
@@ -2255,7 +2272,12 @@ export default function SyllabusBuilder() {
         }<tr class="tot"><td>Total</td><td class="w">${isPoints
           ? fmtWeight(pointsTotal)
           : `${fmtWeight(weightTotal)}%`}</td>${hasDueDates ? "<td></td>" : ""}<td></td></tr></table>`);
-      if (d.scale) h.push(tag("scale", `<h3>Grading scale</h3>${para(d.scale)}`));
+      if (scaleValid(d.scaleCuts)) {
+        const rows = scaleRows(d.scaleCuts);
+        h.push(tag("scale", `<h3>Grading scale</h3><table class="grid scale"><tr><th scope="row">Grade</th>${
+          rows.map(([L]) => `<th scope="col">${L}</th>`).join("")}</tr><tr><th scope="row">Percent</th>${
+          rows.map(([, range]) => `<td>${range}</td>`).join("")}</tr></table>`));
+      }
     }
 
     if (d.hasLab) {
@@ -2357,6 +2379,7 @@ export default function SyllabusBuilder() {
     table.grid{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:10.5pt}
     .grid th,.grid td{border:1px solid ${C.line};padding:6px 9px;text-align:left;vertical-align:top}
     .grid th{background:#EEF2F7;color:${C.navy};font-weight:bold;width:auto}
+    .grid.scale td,.grid.scale th[scope="col"]{text-align:center}
     .grid td .tag{font-size:8.5pt;color:${C.orangeText};font-weight:bold;margin-top:3px}
     .grid .w{width:70px;text-align:right}
     .grid .wk{width:110px}
@@ -2987,7 +3010,34 @@ export default function SyllabusBuilder() {
                 </span>
               </div>
             )}
-            <Field src="scale" label="Grading scale"><A rows={2} value={d.scale} onChange={(v) => set("scale", v)} /></Field>
+            {/* one row per grade: the letter, its range in words, and where it starts */}
+            <div className="group-box" data-src="scale">
+              <div className="group-head">Grading scale</div>
+              <div className="group-note">Set where each grade starts. The ranges fill in from there.</div>
+              {SCALE_LETTERS.map((L, i) => {
+                const low = scaleCut(d.scaleCuts, L);
+                const top = i === 0 ? 100 : scaleCut(d.scaleCuts, SCALE_LETTERS[i - 1]) - 1;
+                const range = !Number.isFinite(low) || !Number.isFinite(top) ? "–" : low >= top ? `${low}%` : `${low} to ${top}%`;
+                return (
+                  <label key={L} className="inset-row scale-row">
+                    <span className="scale-grade"><b>{L}</b><span>{range}</span></span>
+                    <span className="inset-value">
+                      <span className="inset-unit">starts at</span>
+                      <input className="inset-input" inputMode="numeric" aria-label={`${L} starts at what percent`} value={d.scaleCuts[L]}
+                        onChange={(e) => set("scaleCuts", { ...d.scaleCuts, [L]: e.target.value.replace(/[^\d.]/g, "") })} />
+                      <span className="inset-unit">%</span>
+                    </span>
+                  </label>
+                );
+              })}
+              <div className="inset-row scale-row">
+                <span className="scale-grade"><b>F</b><span>below {d.scaleCuts.D || "–"}%</span></span>
+              </div>
+              {!scaleValid(d.scaleCuts) && (
+                <div className="group-note is-warn" role="status"><AlertTriangle size={13} aria-hidden="true" />
+                  Each grade has to start between 1 and 100, below the grade above it.</div>
+              )}
+            </div>
           </>)}
 
           {tab === 7 && (<>

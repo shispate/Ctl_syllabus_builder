@@ -618,6 +618,11 @@ label.inset-row { cursor: text; }
 .inset-input::placeholder { color: var(--muted); }
 .inset-value .inset-input { width: 70px; }
 .inset-unit { color: var(--muted); font-size: 15px; }
+/* grading scale card: letter and its range on the left, where it starts on the right */
+.scale-grade { display: flex; align-items: baseline; gap: 12px; }
+.scale-grade b { width: 14px; font-weight: 600; }
+.scale-grade span { color: var(--muted); }
+.editor-form .scale-row input.inset-input { width: 34px; text-align: right; }
 .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 /* meeting days: one track, picked days fill orange, neighbors join into one pill */
 .day-picker { position: relative; display: flex; width: fit-content; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
