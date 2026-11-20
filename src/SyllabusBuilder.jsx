@@ -1453,6 +1453,7 @@ export default function SyllabusBuilder() {
     return total ? before.toString().length / total : null;
   };
   const revealInPreview = (key, { caret = null, behavior = "smooth" } = {}) => {
+    if (key === "outcomeList") caret = 1; // library picks land at the end of the list
     const el = findInPreview(key);
     const scroller = previewScroller();
     // a block can run across pages, so it comes back as one piece per page, in reading order
@@ -1769,62 +1770,6 @@ export default function SyllabusBuilder() {
     );
 
   const realOutcomes = d.outcomes.filter((o) => o.trim());
-  // When a section goes from empty to having content, nudge the preview to
-  // that section's heading so the new content comes into view.
-  const prevRealOutcomesRef = useRef(realOutcomes.length);
-  useEffect(() => {
-    if (realOutcomes.length > prevRealOutcomesRef.current) {
-      const t = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollPreviewToBox("outcomes", Math.max(0, d.outcomes.length - 1), "smooth");
-        });
-      });
-      void t;
-    }
-    prevRealOutcomesRef.current = realOutcomes.length;
-  }, [realOutcomes.length]);
-
-  const countedItems = d.items.filter((x) => x.name).length;
-  const prevItemsRef = useRef(countedItems);
-  useEffect(() => {
-    if (countedItems > prevItemsRef.current) {
-      const t = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollPreviewToBox("items", Math.max(0, d.items.length - 1), "smooth");
-        });
-      });
-      void t;
-    }
-    prevItemsRef.current = countedItems;
-  }, [countedItems]);
-
-  const prevWelcomeRef = useRef(Boolean(d.welcome && d.welcome.trim()));
-  useEffect(() => {
-    const now = Boolean(d.welcome && d.welcome.trim());
-    if (now && !prevWelcomeRef.current) {
-      const t = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollPreviewTo("WELCOME TO THIS COURSE", 0, "auto");
-        });
-      });
-      void t;
-    }
-    prevWelcomeRef.current = now;
-  }, [d.welcome]);
-
-  const countedCustomDescriptions = d.customDescriptions.filter((item) => (item.title || "").trim() || (item.description || "").trim()).length;
-  const prevCustomDescriptionsRef = useRef(countedCustomDescriptions);
-  useEffect(() => {
-    if (countedCustomDescriptions > prevCustomDescriptionsRef.current) {
-      const t = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollPreviewToBox("customDescriptions", Math.max(0, d.customDescriptions.length - 1), "smooth");
-        });
-      });
-      void t;
-    }
-    prevCustomDescriptionsRef.current = countedCustomDescriptions;
-  }, [countedCustomDescriptions]);
   const mappedSlos = new Set(d.items.flatMap((x) => x.slos));
   const unmapped = realOutcomes.map((_, i) => i).filter((i) => !mappedSlos.has(i));
 
@@ -1867,33 +1812,6 @@ export default function SyllabusBuilder() {
     return { ...p, weeks: a };
   });
 
-  const countedMaterials = d.extraMaterials.filter((m) => (m.title || "").trim() || (m.description || "").trim()).length;
-  const prevMaterialsRef = useRef(countedMaterials);
-  useEffect(() => {
-    if (countedMaterials > prevMaterialsRef.current) {
-      const t = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollPreviewToBox("extraMaterials", Math.max(0, d.extraMaterials.length - 1), "smooth");
-        });
-      });
-      void t;
-    }
-    prevMaterialsRef.current = countedMaterials;
-  }, [countedMaterials]);
-
-  const countedWeeks = schedRows.filter((w) => (w.label || "").trim() || (w.topics || "").trim() || (w.dates || "").trim()).length;
-  const prevWeeksRef = useRef(countedWeeks);
-  useEffect(() => {
-    if (countedWeeks > prevWeeksRef.current) {
-      const t = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollPreviewToBox("weeks", Math.max(0, d.weeks.length - 1), "smooth");
-        });
-      });
-      void t;
-    }
-    prevWeeksRef.current = countedWeeks;
-  }, [countedWeeks]);
   const toggleDay = (n) => set("meetDays",
     d.meetDays.includes(n) ? d.meetDays.filter((x) => x !== n) : [...d.meetDays, n].sort(byWeek));
 
@@ -2292,7 +2210,7 @@ export default function SyllabusBuilder() {
       sec("Student Learning Outcomes");
       if (d.showPrimer) h.push(`<div class="primer" data-src="showPrimer"><div class="primer-h">For the instructor: what an SLO is and why it is here</div>${para(SLO_PRIMER)}</div>`);
       if (realOutcomes.length) {
-        h.push(`<p>By the end of this course, you should be able to:</p><ol>${
+        h.push(`<p>By the end of this course, you should be able to:</p><ol data-src="outcomeList">${
           d.outcomes.map((o, i) => o.trim()
             ? `<li data-src="outcomes:${i}">${esc(o)}</li>`
             : "").join("")}</ol>`);
@@ -2395,7 +2313,7 @@ export default function SyllabusBuilder() {
     const wk = schedRows.map((w, i) => ({ ...w, i })).filter((w) => w.label || w.topics || w.dates);
     if (wk.length) {
       sec("Course Schedule");
-      h.push(`<table class="grid" data-src="scheduleType semesterStart meetDays"><tr><th scope="col" class="wk">${d.scheduleType === "modular" ? "Module" : "Week"}</th><th scope="col">Topics and Readings</th><th scope="col" class="due">Due</th></tr>${
+      h.push(`<table class="grid" data-src="scheduleType semesterStart classDays"><tr><th scope="col" class="wk">${d.scheduleType === "modular" ? "Module" : "Week"}</th><th scope="col">Topics and Readings</th><th scope="col" class="due">Due</th></tr>${
         wk.map((w) => `<tr data-src="weeks:${w.i}"><td class="wk"><strong>${esc(w.label)}</strong>${w.dates ? `<br/><span class="soft">${esc(w.dates)}</span>` : ""}</td><td>${
           w.off.map((o) => `<div class="off">${esc(o)}</div>`).join("")}${esc(w.topics).replace(/\n/g, "<br/>")}</td><td class="due">${esc(w.due).replace(/\n/g, "<br/>")}</td></tr>`).join("")
       }</table>`);
@@ -2904,7 +2822,7 @@ export default function SyllabusBuilder() {
 
             <div className="section-title">Outcome library</div>
             {OUTCOME_LIBRARY.map((g) => (
-              <div key={g.group} className="group-box">
+              <div key={g.group} className="group-box" data-src="outcomeList">
                 <div className="group-head">{g.group}</div>
                 <div className="group-note" style={{ marginTop: 0 }}>{g.note}</div>
                 {g.items.map((it) => {
@@ -3246,7 +3164,7 @@ export default function SyllabusBuilder() {
                 })) }));
               }} />
             </Field>
-            <Field src="meetDays" label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
+            <Field src="classDays" label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
               <DayPicker days={d.meetDays} onToggle={toggleDay} />
             </Field>
             {auto ? (
