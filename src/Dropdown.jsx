@@ -41,7 +41,9 @@ export function MeltShape({ root }) {
   }, [root]);
   return (
     <svg className="melt-shape" aria-hidden="true" width={shape?.W || 0} height={shape?.h || 0}>
-      {shape && <path d={shape.d} />}
+      {/* three layers so an open dropdown in a card can be solid yet the same gray as a highlighted row:
+          solid panel, then the card color, then the highlight (index.css only fills the lower two in cards) */}
+      {shape && <><path className="melt-base" d={shape.d} /><path className="melt-card" d={shape.d} /><path d={shape.d} /></>}
     </svg>
   );
 }

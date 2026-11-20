@@ -895,6 +895,35 @@ const AddRow = ({ onClick, icon: I = Plus, children }) => (
 // mon-sat day toggles
 // one control for the week; picked days next to each other join into one pill,
 // and a hover pill slides under the days like the lists' highlight
+// soft highlight that follows the pointer from row to row in a card, like the sidebar's pill.
+// it takes each row's corners, so it's square in the middle and rounded at the card's ends
+const RowHover = () => {
+  const ref = useRef(null);
+  const [box, setBox] = useState(null);
+  const slid = useRef(false); // the first hover fades in where it is, later ones slide
+  useEffect(() => {
+    const group = ref.current?.parentElement;
+    if (!group) return undefined;
+    const over = (e) => {
+      const row = e.target.closest?.(".field");
+      if (!row || row.parentElement !== group) return;
+      const cs = getComputedStyle(row);
+      setBox({ top: row.offsetTop, h: row.offsetHeight,
+        r: [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].join(" ") });
+    };
+    const out = () => setBox(null);
+    group.addEventListener("mouseover", over);
+    group.addEventListener("mouseleave", out);
+    return () => { group.removeEventListener("mouseover", over); group.removeEventListener("mouseleave", out); };
+  }, []);
+  const slide = slid.current && box;
+  useEffect(() => { slid.current = Boolean(box); });
+  return (
+    <div ref={ref} className="row-hover" aria-hidden="true" style={{ opacity: box ? 1 : 0, height: box?.h || 0,
+      transform: `translateY(${box?.top || 0}px)`, borderRadius: box?.r, transition: slide ? undefined : "opacity 0.15s ease" }} />
+  );
+};
+
 const DayPicker = ({ days, onToggle }) => {
   const [hover, setHover] = useState(null);
   const slid = useRef(false); // the first hover fades in where it is, later ones slide
@@ -2745,6 +2774,7 @@ export default function SyllabusBuilder() {
                 </Field>
               <Field src="title" label="Course title"><T value={d.title} onChange={(v) => set("title", v)} placeholder="American Foreign Policy" /></Field>
                 <Field src="crn" label="CRN"><T value={d.crn} onChange={(v) => set("crn", v.replace(/\D/g, "").slice(0, 5))} placeholder="12345" /></Field>
+              <RowHover />
             </div>
             <div className="field-group">
                 <Field src="term" label="Term" hint="used for the lookup too">
@@ -2765,6 +2795,7 @@ export default function SyllabusBuilder() {
               <Dropdown value={d.modality} onChange={(v) => set("modality", v)} ariaLabel="Delivery"
                 options={["In person", "Hybrid", "Online synchronous", "Online asynchronous", "Dual Enrollment", "Internship"].map((m) => ({ value: m, label: m }))} />
             </Field>
+              <RowHover />
             </div>
             <div className="field-group">
             {/* the same days the Schedule tab dates its weeks from */}
@@ -2780,6 +2811,7 @@ export default function SyllabusBuilder() {
             </Field>
             <Field src="location" label="Room"><T value={d.location} onChange={(v) => set("location", v)} placeholder="Humanities 407" /></Field>
             <Field src="exlocation" label="Other meeting room" hint="Only fill this if some classes take place in other room during the week"><T value={d.exlocation} onChange={(v) => set("exlocation", v)} placeholder="Humanities 409 on Fridays" /></Field>
+              <RowHover />
             </div>
             <div className="field-group">
             <Field src="dept" label="Department" hint="type freely, or pick from the list">
@@ -2790,6 +2822,7 @@ export default function SyllabusBuilder() {
                 ])} />
             </Field>
             <Field src="prereq" label="Prerequisites"><T value={d.prereq} onChange={(v) => set("prereq", v)} placeholder="None" /></Field>
+              <RowHover />
             </div>
           </>)}
 
@@ -2804,11 +2837,13 @@ export default function SyllabusBuilder() {
             <Field src="email" label="Email"><T value={d.email} onChange={(v) => set("email", v)} onBlur={() => {const email = d.email.trim(); set("email", email ? (email.endsWith("@") ? `${email}utm.edu` : email.includes("@") ? email : `${email}@utm.edu`) : "");}} placeholder="jdoe (autofills @utm.edu)" /></Field>
             <Field src="phone" label="Phone"><T type="tel" value={d.phone} onChange={(v) => set("phone", v)} placeholder="731-555-0123" /></Field>
             <Field src="office" label="Office"><T value={d.office} onChange={(v) => set("office", v)} placeholder="Humanities 212" /></Field>
+              <RowHover />
             </div>
             <Field src="hours" label="Office hours"><A rows={2} value={d.hours} onChange={(v) => set("hours", v)} placeholder="Monday and Wednesday, 10 a.m. to noon, and by appointment. Email me and we will find a time that works." /></Field>
             <div className="field-group">
             <Field src="subjectLine" label="Email subject line" hint="cuts your response time"><T value={d.subjectLine} onChange={(v) => { subjectLineAutoRef.current = false; set("subjectLine", v); }} placeholder="POSC 322 - [your question]" /></Field>
             <Field src="address" label="How to address you"><T value={d.address} onChange={(v) => set("address", v)} placeholder="Dr. Doe" /></Field>
+              <RowHover />
             </div>
           </>)}
 
@@ -3232,6 +3267,7 @@ export default function SyllabusBuilder() {
             <Field src="classDays" label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
               <DayPicker days={d.meetDays} onToggle={toggleDay} />
             </Field>
+              <RowHover />
             </div>
             {auto ? (
               <Caption>
@@ -3349,6 +3385,7 @@ export default function SyllabusBuilder() {
                 <T value={d.lab.meeting} onChange={(v) => setLab("meeting", v)} placeholder="2:00 to 4:50 p.m." />
               </Field>
               <Field src="lab.location" label="Lab location"><T value={d.lab.location} onChange={(v) => setLab("location", v)} placeholder="Science Complex 118" /></Field>
+                <RowHover />
               </div>
               <Field src="lab.description" label="What happens in lab" hint="how it connects to lecture"><A rows={3} value={d.lab.description} onChange={(v) => setLab("description", v)} /></Field>
               <Field src="lab.gradeNote" label="How the lab counts toward the course grade" hint="separate grade, percent of the total, or must pass both"><A rows={3} value={d.lab.gradeNote} onChange={(v) => setLab("gradeNote", v)} placeholder="Lab is 25 percent of your final grade. Lab reports are graded within one week." /></Field>

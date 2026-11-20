@@ -489,7 +489,7 @@ body { letter-spacing: -0.011em; }
 /* one field per row */
 .editor-form .flex:has(> div > .field) { display: block; }
 /* focus ring goes around the whole field */
-.editor-form .field { transition: box-shadow 0.15s ease; }
+.editor-form .field { box-shadow: 0 0 0 1.5px transparent; transition: box-shadow 0.15s ease; } /* transparent, not none, or it can't fade out */
 .editor-form .field:focus-within { box-shadow: 0 0 0 1.5px var(--ring); }
 .editor-form .field :is(input, div:has(> [contenteditable]), button[aria-haspopup="listbox"]) { box-shadow: none; }
 @media (max-width: 520px) { .field-label { flex-basis: 110px; } }
@@ -852,7 +852,8 @@ label.inset-row { cursor: text; }
 .melt-shape { display: none; }
 .editor-form .field:not(:has([data-multiline])) .melt-shape { display: block; position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .melt-shape path { fill: var(--field-bg); stroke: transparent; stroke-width: 1.5; transition: stroke 0.15s ease; }
-.editor-form .field:not(:has([data-multiline])):is(:focus-within, :has(.dropdown.is-open)) .melt-shape path { stroke: var(--ring); }
+.melt-shape :is(.melt-base, .melt-card) { fill: transparent; stroke: none; }
+.editor-form .field:not(:has([data-multiline])):is(:focus-within, :has(.dropdown.is-open)) .melt-shape path:last-child { stroke: var(--ring); }
 .editor-form .field:not(:has([data-multiline])) .dropdown-list { padding: 2px 6px 6px; }
 
 /* autofill lists */
@@ -951,23 +952,24 @@ button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--fiel
 }
 
 /* grouped rows, like iOS Settings: one card, rows share it, a hairline between them (kept last so it wins ties) */
-.editor-form .field-group { margin-bottom: 14px; border-radius: 18px; background: var(--field-bg); }
+.editor-form .field-group { position: relative; margin-bottom: 14px; border-radius: 18px; background: var(--field-bg); }
 .editor-form .field-group > .field { position: relative; margin: 0; border-radius: 0; background: transparent; }
-.editor-form .field-group > .field:first-child { border-radius: 18px 18px 0 0; }
-.editor-form .field-group > .field:last-child { border-radius: 0 0 18px 18px; }
-.editor-form .field-group > .field:only-child { border-radius: 18px; }
+.editor-form .field-group > .field:nth-child(1 of .field) { border-radius: 18px 18px 0 0; } /* "of .field": the hover outline is a child too */
+.editor-form .field-group > .field:nth-last-child(1 of .field) { border-radius: 0 0 18px 18px; }
+.editor-form .field-group > .field:nth-child(1 of .field):nth-last-child(1 of .field) { border-radius: 18px; }
 .editor-form .field-group > .field + .field::before {
-  content: ""; position: absolute; top: 0; left: 18px; right: 0; height: 1px; background: var(--line); pointer-events: none;
+  content: ""; position: absolute; top: 0; left: 18px; right: 18px; height: 1px; background: var(--line); pointer-events: none;
 }
 /* dropdown rows keep the melt: its outline is their focus ring, and the open list floats over the rows below
    (so the card doesn't stretch into an empty block); the shape is only filled while open, solid so rows don't show through */
 .editor-form .field-group > .field:not(:has([data-multiline])) .dropdown-more { position: absolute; top: 44px; right: 0; z-index: 2; }
 .editor-form .field-group > .field:has(.dropdown.is-open) { z-index: 3; }
 /* closing: stay on top and filled until the drip has pulled back (0.3s), or the rows show through it */
-.editor-form .field-group > .field { z-index: 1; transition: box-shadow 0.15s ease, z-index 0s linear 0.3s; } /* a number (not auto) so the step back down can wait */
+.editor-form .field-group > .field { z-index: 1; box-shadow: inset 0 0 0 1.5px transparent; transition: box-shadow 0.15s ease, z-index 0s linear 0.3s; } /* a number (not auto) so the step back down can wait */
 .editor-form .field-group > .field:has(.dropdown.is-open) { transition: box-shadow 0.15s ease, z-index 0s; }
 .editor-form .field-group .melt-shape path { fill: transparent; transition: stroke 0.15s ease, fill 0.2s ease 0.25s; } /* fades back as the drip finishes pulling in */
-.editor-form .field-group > .field:has(.dropdown.is-open) .melt-shape path { fill: var(--paper); transition: stroke 0.15s ease, fill 0.15s ease; }
+.editor-form .field-group > .field:has(.dropdown.is-open) .melt-shape .melt-base { fill: var(--paper); transition: fill 0.15s ease; }
+.editor-form .field-group > .field:has(.dropdown.is-open) .melt-shape .melt-card { fill: var(--field-bg); transition: fill 0.15s ease; }
 /* plain rows: the focus ring sits just inside the row */
 .editor-form .field-group > .field:not(:has([data-multiline])):not(:has(.dropdown)):focus-within { box-shadow: inset 0 0 0 1.5px var(--ring); }
 
@@ -978,7 +980,7 @@ button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--fiel
 .row-list > :last-child { border-radius: 0 0 18px 18px; }
 .row-list > :only-child { border-radius: 18px; }
 .row-list > button.list-row:hover, .row-list > .expand-group:has(> button.list-row:hover) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.row-list > * + *::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--line); pointer-events: none; z-index: 1; }
+.row-list > * + *::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: 1px; background: var(--line); pointer-events: none; z-index: 1; }
 .row-list > .list-row:focus-visible, .row-list > .expand-group > .list-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--ring); }
 .row-list > .expand-group > .list-row { border-radius: inherit; }
 
@@ -986,6 +988,29 @@ button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--fiel
 .inset-row { position: relative; }
 .inset-row + .inset-row { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
 .inset-row:has(+ .inset-row) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.inset-row + .inset-row::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; height: 1px; background: var(--line); pointer-events: none; }
+.inset-row + .inset-row::before { content: ""; position: absolute; top: 0; left: 14px; right: 14px; height: 1px; background: var(--line); pointer-events: none; }
 /* a label that wraps to two lines gets room above and below instead of touching the hairlines */
 .editor-form .field-group > .field:not(:has([data-multiline])) .field-label { padding-block: 7px; }
+
+/* the hover highlight: a soft fill under the rows (they're see-through), so a row's orange focus outline draws over it */
+.row-hover {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 0; pointer-events: none;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  transition: transform 0.2s cubic-bezier(0.3, 0.9, 0.4, 1), height 0.2s ease, border-radius 0.2s ease, opacity 0.15s ease;
+}
+
+/* focus is a gray highlight instead of an outline, a step darker than the hover one */
+.editor-form .field { --focus-tint: color-mix(in srgb, var(--ink) 11%, var(--field-bg)); }
+.editor-form .field-group > .field { --focus-tint: color-mix(in srgb, var(--ink) 11%, transparent); }
+.editor-form .field:focus-within,
+.editor-form .field-group > .field:not(:has([data-multiline])):not(:has(.dropdown)):focus-within {
+  box-shadow: 0 0 0 1.5px transparent; background: var(--focus-tint);
+}
+.editor-form .field-group > .field:not(:has([data-multiline])):not(:has(.dropdown)):focus-within { box-shadow: inset 0 0 0 1.5px transparent; }
+.editor-form .field { transition: box-shadow 0.15s ease, background 0.15s ease; }
+.editor-form .field-group > .field { transition: box-shadow 0.15s ease, background 0.15s ease, z-index 0s linear 0.3s; }
+.editor-form .field-group > .field:has(.dropdown.is-open) { transition: box-shadow 0.15s ease, background 0.15s ease, z-index 0s; }
+/* dropdowns: the melt shape is the highlight, so the row itself stays clear */
+.editor-form .field:not(:has([data-multiline])):has(.dropdown):focus-within { background: transparent; }
+.editor-form .field:not(:has([data-multiline])):is(:focus-within, :has(.dropdown.is-open)) .melt-shape path:last-child { stroke: transparent; fill: var(--focus-tint); }
+/* open in a card it floats over the rows below, so it has to be solid */
