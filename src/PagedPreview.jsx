@@ -75,6 +75,37 @@ const PagedPreview = forwardRef(function PagedPreview({ html, css, pageClass, fu
     return () => ro.disconnect();
   }, []);
 
+  // zooming keeps whatever was in the middle of the view in the middle (like a PDF viewer),
+  // so from fit-to-width the page stays centered instead of jumping to its left edge.
+  // the spot is saved as you scroll: zooming out shrinks the pages first, and the browser
+  // clamps the scroll position before this code runs, so it can't be read afterward
+  const view = useRef(null); // { fx, fy, top }: the middle of the view as a share of the pages
+  const lastScale = useRef(scale);
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    const scroller = fullscreen ? host?.parentElement : host;
+    const sizer = root?.querySelector(".preview-sizer");
+    if (!scroller || !sizer) return undefined;
+    const box = () => {
+      const r = sizer.getBoundingClientRect(), s = scroller.getBoundingClientRect();
+      return { x: r.left - s.left + scroller.scrollLeft, y: r.top - s.top + scroller.scrollTop, w: r.width, h: r.height };
+    };
+    const save = () => {
+      const b = box();
+      view.current = { fx: (scroller.scrollLeft + scroller.clientWidth / 2 - b.x) / b.w,
+        fy: (scroller.scrollTop + scroller.clientHeight / 2 - b.y) / b.h, top: scroller.scrollTop === 0 };
+    };
+    if (lastScale.current !== scale && view.current) {
+      const b = box(), v = view.current;
+      scroller.scrollLeft = b.x + v.fx * b.w - scroller.clientWidth / 2;
+      if (!v.top) scroller.scrollTop = b.y + v.fy * b.h - scroller.clientHeight / 2; // at the top, stay at the top
+    }
+    lastScale.current = scale;
+    save();
+    scroller.addEventListener("scroll", save, { passive: true });
+    return () => scroller.removeEventListener("scroll", save);
+  }, [scale, fullscreen, root]);
+
   // the shadow root can't see the page theme, so point the theme rules at the host ("+" isn't allowed in a class)
   const tone = (t) => `tone-${t.replace("+", "-plus")}`;
   const shadowCss = SCREEN_CSS + (css + PAGE_CSS).replace(/\[data-theme="([^"]+)"\]/g, (_, t) => `:host(.${tone(t)})`);
@@ -125,4 +156,21 @@ export function previewSpot(el, scroller) {
     bottom: top - s.top + scroller.scrollTop + r.height,
     visible: top >= s.top - 24 && top + r.height <= s.bottom + 24,
   };
+}
+
+// the same, but one spot per page a block runs across (a long paragraph split over two pages), in reading order
+export function previewSpots(el, scroller) {
+  const page = el.closest(".preview-page");
+  const clip = el.closest(".page-clip");
+  if (!page || !clip || !scroller) return [];
+  const k = Number(page.dataset.page);
+  const c = clip.getBoundingClientRect(), s = scroller.getBoundingClientRect();
+  const scale = c.width / CONTENT_W;
+  return [...el.getClientRects()].map((r) => {
+    const column = k + Math.floor((r.left - c.left) / (STRIDE * scale) + 0.001);
+    const shown = el.getRootNode().querySelector(`.preview-page[data-page="${column}"] .page-clip`);
+    if (!shown) return null;
+    const top = shown.getBoundingClientRect().top + (r.top - c.top) - s.top + scroller.scrollTop;
+    return { column, top, bottom: top + r.height };
+  }).filter(Boolean).sort((a, b) => a.column - b.column || a.top - b.top);
 }

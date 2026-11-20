@@ -8,7 +8,7 @@ import { flushSync } from "react-dom";
 import { UI, inputBase, reduceMotion, useDismiss, glideHeight, foldIn, foldOut, stairRef } from "./ui.js";
 import Dropdown, { MorphChevron, SlideHighlight, SuggestList } from "./Dropdown.jsx";
 import DateField from "./DateField.jsx";
-import PagedPreview, { previewSpot, PAGE_CSS, countPages, pagesHtml } from "./PagedPreview.jsx";
+import PagedPreview, { previewSpot, previewSpots, PAGE_CSS, countPages, pagesHtml } from "./PagedPreview.jsx";
 import { SUBJECTS } from "./subjectCodes.js";
 import WaveBackground from "./WaveBackground.jsx";
 
@@ -246,7 +246,8 @@ Emergency: 911`,
   },
 };
 
-const Spring_2027 = [
+// saved copy, only used when utm.edu can't be reached or doesn't list the term
+const SAVED_REGISTRAR_DATES = { "Spring 2027": [
   ["January 7", "Classes Begin"],
   ["January 18", "Martin Luther King Holiday"],
   ["February 22", "Midterm progress report"],
@@ -254,8 +255,8 @@ const Spring_2027 = [
   ["March 26", "Spring Holiday"],
   ["April 23", "Classes End"],
   ["April 26-30", "Final exams"],
-  ["May 1", "Commencement"]
-];
+  ["May 1", "Commencement"],
+] };
 
 const SUMMER_SCHEDULES = {
   "summer-full": { label: "Full summer schedule", start: "2026-06-02", end: "2026-08-06" },
@@ -358,7 +359,9 @@ function summer2027(start, end) {
 
 /* ---------- calendar helpers ---------- */
 
-const CLASS_DAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"]];
+// day numbers match Date.getDay(): 0 = Sunday, first like a US calendar
+const CLASS_DAYS = [[0, "Sun"], [1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"]];
+const byWeek = (a, b) => a - b;
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July",
   "August", "September", "October", "November", "December"];
@@ -437,13 +440,6 @@ const fmtWeight = (n) => {
 
 /* ---------- initial state ---------- */
 
-
-const MEETING_PATTERNS = [
-  { value: "MWF", label: "Monday-Wednesday-Friday (MWF)" },
-  { value: "MW", label: "Monday-Wednesday (MW)" },
-  { value: "TR", label: "Tuesday-Thursday (TR)" },
-  { value: "custom", label: "Custom" },
-];
 
 // Guesses the term people are planning for: once a term is a month in, it's the next one.
 // Only used until Banner says which term is open, or if Banner can't be reached.
@@ -533,7 +529,7 @@ for (const { departments } of DEPARTMENT_DATA) {
 // initial state and every reset independent of each other.
 const createBlank = () => ({
   code: "", title: "", crn: "", section: "", term: defaultTerm(), modality: "In person", semester: "Full Semester",
-  credits: "3", meetingPattern: "", meeting: "", meetingTime: "",
+  credits: "3", meetingTime: "",
   location: "", exlocation: "", dept: "", prereq: "",
   instructor: "", email: "", phone: "", office: "", hours: "", address: "",
   subjectLine: "",
@@ -548,7 +544,7 @@ const createBlank = () => ({
   attendance: "", late: "", lateSample: "", lateAdditional: [], participation: "",
   aiTier: "mixed", aiCustom: "", profNote: "", customPolicies: [],
   inc: { integrity: true, accessibility: true, support: true, crisis: true, changes: true },
-  meetDays: [], // 1 = Monday ... 6 = Saturday
+  meetDays: [], // 0 = Sunday, 1 = Monday ... 6 = Saturday
   scheduleType: "weekly",
   semesterStart: FALL_2026_START,
   weeks: [{ label: "Week 1", dates: "", topics: "", due: "" }],
@@ -827,8 +823,9 @@ const A = ({ value, onChange, placeholder, rows = 4, onBlur }) => (
 );
 
 /** Groups a label, hint, and form control into one consistent field. */
-const Field = ({ label, hint, children }) => (
-  <div className="field">
+// src: the data this field edits, matching data-src in the preview (see docBody)
+const Field = ({ label, hint, src, children }) => (
+  <div className="field" data-src={src}>
     <span className="field-label" title={hint || undefined}>{sentenceCase(label)}</span>
     <div className="field-input">{children}</div>
   </div>
@@ -848,9 +845,9 @@ const CardField = ({ title, onTitle, titlePlaceholder, titleLabel, label, onRemo
 );
 
 // a label with an on/off switch
-const SwitchRow = ({ checked, onChange, children }) => (
+const SwitchRow = ({ checked, onChange, src, children }) => (
   // stops the focus ring from sticking after a click
-  <label className="toggle-row" onMouseDown={(e) => e.preventDefault()}>
+  <label className="toggle-row" data-src={src} onMouseDown={(e) => e.preventDefault()}>
     <span>{children}</span>
     <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
   </label>
@@ -878,14 +875,29 @@ const AddRow = ({ onClick, icon: I = Plus, children }) => (
 );
 
 // mon-sat day toggles
-const DayChips = ({ days, onToggle }) => (
-  <span className="chips" role="group" aria-label="Meeting days">
-    {CLASS_DAYS.map(([n, name]) => (
-      <button key={n} type="button" className="chip" aria-pressed={days.includes(n)} aria-label={DAY_NAMES[n]}
-        onClick={() => onToggle(n)}>{name}</button>
-    ))}
-  </span>
-);
+// one control for the week; picked days next to each other join into one pill,
+// and a hover pill slides under the days like the lists' highlight
+const DayPicker = ({ days, onToggle }) => {
+  const [hover, setHover] = useState(null);
+  const slid = useRef(false); // the first hover fades in where it is, later ones slide
+  const slide = slid.current && hover != null;
+  useEffect(() => { slid.current = hover != null; });
+  return (
+    <span className="day-picker" role="group" aria-label="Meeting days" onMouseLeave={() => setHover(null)}>
+      <span className="day-slide" aria-hidden="true" style={{ opacity: hover == null ? 0 : 1,
+        transform: `translateX(${(hover ?? 0) * 100}%)`, transition: slide ? undefined : "opacity 0.15s ease" }} />
+      {CLASS_DAYS.map(([n, letter], i) => {
+        const on = days.includes(n);
+        const joins = (j) => on && CLASS_DAYS[j] && days.includes(CLASS_DAYS[j][0]);
+        return (
+          <button key={n} type="button" aria-pressed={on} aria-label={DAY_NAMES[n]} title={DAY_NAMES[n]}
+            className={`${joins(i - 1) ? "join-prev" : ""} ${joins(i + 1) ? "join-next" : ""}`.trim() || undefined}
+            onMouseEnter={() => setHover(i)} onClick={() => onToggle(n)}>{letter}</button>
+        );
+      })}
+    </span>
+  );
+};
 
 // a row that opens to show more
 // openSummary: different right-side text while open; the two slide past each other
@@ -1113,6 +1125,17 @@ export default function SyllabusBuilder() {
     }
     return offlineCatalogRef.current;
   };
+
+  // the registrar's dates for every term on utm.edu/academics/academic-calendar
+  const [registrar, setRegistrar] = useState({ status: "loading", terms: {} });
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/banner?action=calendar")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((payload) => { if (!cancelled) setRegistrar({ status: "ok", terms: payload.terms || {} }); })
+      .catch(() => { if (!cancelled) setRegistrar({ status: "failed", terms: {} }); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1361,11 +1384,6 @@ export default function SyllabusBuilder() {
     "LABORATORY COMPONENT",                      // 10 Labs
     null,                                        // 11 Export
   ];
-  const SECTION_FOR_ITEM = {
-    weeks: "COURSE SCHEDULE",
-    items: "ASSESSMENT AND GRADING",
-    outcomes: "STUDENT LEARNING OUTCOMES",
-  };
   // Maps a repeated text-box key to the syllabus section its preview items live in.
   const SECTION_FOR_BOX = {
     outcomes: "STUDENT LEARNING OUTCOMES",
@@ -1387,33 +1405,7 @@ export default function SyllabusBuilder() {
     return el && el !== document.body ? el : null;
   };
 
-  // Scroll the preview to the heading for the section being edited, so the user
-  // sees the change without hunting for it. Works in both normal and fullscreen
-  // mode, where the scrolling element is the wrapper around the page.
-  // Per-box vertical step used when an extra text box is added. Each repeated
-  // section has different-sized items, so a single value either under-scrolled
-  // the outcomes boxes or over-scrolled everything else.
-  const boxStepFor = (key) => ({
-    outcomes: 42,
-    customDescriptions: 88,
-    extraMaterials: 68,
-    items: 76,
-    lateAdditional: 58,
-    customPolicies: 62,
-    weeks: 36,
-  }[key] || 44);
-  // Saves a pixel offset for every repeated text box, keyed by `${key}-${index}`,
-  // so editing an earlier box returns the preview to that box's saved spot.
-  const savedBoxOffsets = useRef({});
-
-  const boxOffsetFor = (key, index) => {
-    const id = `${key}-${index}`;
-    if (savedBoxOffsets.current[id] === undefined) {
-      savedBoxOffsets.current[id] = index * boxStepFor(key);
-    }
-    return savedBoxOffsets.current[id];
-  };
-
+  // Scroll the preview to the heading for the section being edited (used when the tab changes).
   const scrollPreviewTo = (sectionName, offsetPixels = 0, behavior = "smooth") => {
     const paper = previewRef.current?.shadowRoot || previewRef.current; // pages are in a shadow root
     if (!sectionName || !paper) return;
@@ -1431,88 +1423,59 @@ export default function SyllabusBuilder() {
     scroller.scrollTo({ top: Math.min(maxScroll, Math.max(0, top)), behavior: behavior === "auto" ? "auto" : "smooth" });
   };
 
-  // Scroll the preview to the exact repeated item being edited when possible,
-  // using the live preview DOM so empty items never overshoot their spot.
-  const scrollPreviewToBox = (key, index, behavior = "smooth") => {
-    const sectionName = SECTION_FOR_BOX[key];
-    if (!sectionName) return;
-
-    const paper = previewRef.current?.shadowRoot || previewRef.current; // pages are in a shadow root
-    if (!paper) return;
-    const heading = [...paper.querySelectorAll("h2, h3")]
-      .find((h) => h.innerText.trim() === sectionName);
-    if (!heading) { scrollPreviewTo(sectionName, 0, behavior); return; }
-    const scroller = previewScroller();
-    if (!scroller) return;
-    let target = heading;
-    const direct = paper.querySelector(`[data-preview-key="${key}"][data-preview-index="${index}"]`);
-    if (direct) target = direct;
-    else if (key === "outcomes") {
-      let el = heading.nextElementSibling;
-      while (el && el.tagName !== "OL") el = el.nextElementSibling;
-      const items = el ? [...el.querySelectorAll(":scope > li")] : [];
-      const renderedIndex = d.outcomes.slice(0, index).filter((o) => String(o).trim()).length;
-      if (items[renderedIndex]) target = items[renderedIndex];
-      else if (items.length) target = items[items.length - 1];
-    } else if (key === "weeks") {
-      let el = heading.nextElementSibling;
-      while (el && !(el.tagName === "TABLE" && el.classList.contains("grid"))) el = el.nextElementSibling;
-      const rows = el ? [...el.querySelectorAll("tr")] : [];
-      if (rows.length > index + 1) target = rows[index + 1];
-      else if (rows.length) target = rows[rows.length - 1];
-    } else if (key === "extraMaterials") {
-      let el = heading.nextElementSibling;
-      const headings = [];
-      while (el && el.tagName !== "H2") {
-        if (el.tagName === "H3") headings.push(el);
-        el = el.nextElementSibling;
-      }
-      const title = String(d.extraMaterials[index]?.title || "").trim().toUpperCase();
-      const match = title ? headings.find((h) => h.innerText.trim().toUpperCase() === title) : null;
-      if (match) target = match;
-      else if (headings.length) target = headings[Math.min(headings.length - 1, index)];
-    } else if (key === "customPolicies") {
-      let el = heading.nextElementSibling;
-      const headings = [];
-      while (el && el.tagName !== "H2") {
-        if (el.tagName === "H3") headings.push(el);
-        el = el.nextElementSibling;
-      }
-      const title = String(d.customPolicies[index]?.title || "").trim().toUpperCase();
-      const match = title ? headings.find((h) => h.innerText.trim().toUpperCase() === title) : null;
-      if (match) target = match;
-      else if (headings.length) target = headings[Math.min(headings.length - 1, index)];
-    } else if (key === "customDescriptions") {
-      const title = String(d.customDescriptions[index]?.title || "").trim().toUpperCase() || "CUSTOM COURSE DESCRIPTION";
-      const known = new Set(["COURSE INFORMATION", "WELCOME TO THIS COURSE", "COURSE DESCRIPTION", "STUDENT LEARNING OUTCOMES", "REQUIRED MATERIALS", "ASSESSMENT AND GRADING", "COURSE POLICIES", "UNIVERSITY POLICIES AND STUDENT SUPPORT", "COURSE SCHEDULE", "LABORATORY COMPONENT"]);
-      const candidates = [...paper.querySelectorAll("h2")].filter((h) => !known.has(h.innerText.trim().toUpperCase()));
-      const match = candidates.find((h) => h.innerText.trim().toUpperCase() === title);
-      if (match) target = match;
-      else if (candidates[index]) target = candidates[index];
-      else if (candidates.length) target = candidates[candidates.length - 1];
-      else return;
-    } else if (key === "items") {
-      let el = heading.nextElementSibling;
-      while (el && !(el.tagName === "TABLE" && el.classList.contains("grid"))) el = el.nextElementSibling;
-      const rows = el ? [...el.querySelectorAll("tr")] : [];
-      const name = String(d.items[index]?.name || "").trim();
-      const match = name ? rows.find((r) => {
-        const strong = r.querySelector("strong");
-        return strong && strong.innerText.trim() === name;
-      }) : null;
-      if (match) target = match;
-      else if (rows.length) target = rows[rows.length - 1];
-    }
-    if (target === heading) {
-      scrollPreviewTo(sectionName, index * boxStepFor(key), behavior);
-      return;
-    }
-    const spot = previewSpot(target, scroller);
-    if (!spot || spot.visible) return; // already visible
-    const scTop = spot.top - 30;
-    if (Math.abs(scTop - scroller.scrollTop) <= 8) return;
-    scroller.scrollTo({ top: Math.max(0, scTop), behavior });
+  // The preview follows the form. Each form field and each piece of the preview carry the same
+  // data-src key ("welcome", "lab.safety", "outcomes:2" for boxes), so editing a field glides the
+  // preview to that exact spot. Nothing rendered yet (an empty field) falls back to the section heading.
+  const activeSrc = useRef(null);
+  const findInPreview = (key) => {
+    const paper = previewRef.current?.shadowRoot;
+    if (!paper || !key) return null;
+    // every page holds a full copy of the document; previewSpot works out which page really shows it
+    const hit = paper.querySelector(`.preview-page[data-page="0"] [data-src~="${key}"]`);
+    if (hit) return hit;
+    const section = SECTION_FOR_BOX[key.split(":")[0]] || SECTION_FOR_TAB[tab];
+    return [...paper.querySelectorAll('.preview-page[data-page="0"] h2')]
+      .find((h) => h.textContent.trim().toUpperCase() === section) || null;
   };
+  // how far through its text the caret is (0 to 1), so long text keeps the part being typed in view
+  const caretShare = (el) => {
+    if (!el) return null;
+    if (typeof el.selectionEnd === "number" && typeof el.value === "string") {
+      return el.value.length ? el.selectionEnd / el.value.length : null;
+    }
+    const editor = el.closest?.("[contenteditable]");
+    const sel = window.getSelection();
+    if (!editor || !sel?.rangeCount || !editor.contains(sel.focusNode)) return null;
+    const before = document.createRange();
+    before.selectNodeContents(editor);
+    before.setEnd(sel.focusNode, sel.focusOffset);
+    const total = editor.textContent.length;
+    return total ? before.toString().length / total : null;
+  };
+  const revealInPreview = (key, { caret = null, behavior = "smooth" } = {}) => {
+    const el = findInPreview(key);
+    const scroller = previewScroller();
+    // a block can run across pages, so it comes back as one piece per page, in reading order
+    const parts = el && scroller ? previewSpots(el, scroller) : [];
+    if (!parts.length) return;
+    const view = scroller.clientHeight, pad = 40;
+    let a = parts[0].top, b = parts[0].bottom;
+    const total = parts.reduce((n, p) => n + p.bottom - p.top, 0);
+    // a tall block: aim at the caret's line (on whichever page it lands) instead of the block's top
+    if (caret != null && (parts.length > 1 || total > view / 2)) {
+      let left = caret * total;
+      const part = parts.find((p) => (left -= p.bottom - p.top) <= 0) || parts[parts.length - 1];
+      const y = part.bottom + Math.min(0, left);
+      a = y - 60; b = y + 60;
+    }
+    const top = scroller.scrollTop;
+    if (a >= top + pad && b <= top + view - pad) return; // already in view, don't move
+    // land it a quarter of the way down, or at the top if it's taller than the view
+    const to = b - a > view - pad * 2 ? a - pad : a - view / 4;
+    const max = scroller.scrollHeight - view;
+    scroller.scrollTo({ top: Math.max(0, Math.min(max, to)), behavior: reduceMotion() ? "auto" : behavior });
+  };
+  const scrollPreviewToBox = (key, index, behavior = "smooth") => revealInPreview(`${key}:${index}`, { behavior });
 
   // Auto-scroll on tab changes: clicking any editor tab moves the preview to
   // that tab's syllabus section. (This does not run for every keystroke.)
@@ -1523,76 +1486,29 @@ export default function SyllabusBuilder() {
     return () => clearTimeout(t);
   }, [tab]);
 
-  // Scroll the preview once when a field receives focus (instead of on every
-  // keystroke). This keeps the preview aligned with what you are editing
-  // without yanking it away while you type in a long section. Repeated text
-  // boxes carry a saved pixel offset so focusing an earlier box scrolls back to
-  // its saved spot instead of jumping to the newest one.
-  // Saved pixel positions for repeated form text boxes, keyed by `${key}-${index}`,
-  // so a box that was pushed later still scrolls back to its saved spot when an
-  // earlier box is focused again.
-  const formBoxPositions = useRef({});
   const skipNextFocusScrollRef = useRef(false);
-  const formScroller = () => {
-    const el = formRef.current;
-    if (!el) return null;
-    return el.scrollHeight > el.clientHeight + 1 ? el : null;
+  // which data a form element edits: a box's "key:index", or the nearest data-src
+  const srcOf = (target) => {
+    const box = target?.closest?.("[data-box-key]");
+    if (box && Number.isFinite(parseInt(box.dataset.boxIndex, 10))) return `${box.dataset.boxKey}:${box.dataset.boxIndex}`;
+    return target?.closest?.("[data-src]")?.dataset.src || null;
   };
-
+  // focus and clicks both count (switches and day buttons don't take focus when clicked)
   useEffect(() => {
     const form = formRef.current;
-    if (!form) return;
-    const handleFocus = (event) => {
-      if (skipNextFocusScrollRef.current) {
-        skipNextFocusScrollRef.current = false;
-        return;
-      }
-      const target = event && event.target;
-      const box = (target && typeof target.closest === "function")
-        ? target.closest("[data-box-key]")
-        : null;
-      const focusedBox = box;
-      // Keep the preview aligned with the box being edited.
-      const previewT = requestAnimationFrame(() => {
-        const paper = previewRef.current?.shadowRoot || previewRef.current; // pages are in a shadow root
-        if (focusedBox) {
-          const key = focusedBox.dataset.boxKey;
-          const index = parseInt(focusedBox.dataset.boxIndex, 10);
-          if (Number.isFinite(index)) {
-            scrollPreviewToBox(key, index, "smooth");
-            return;
-          }
-        }
-        // Standard fields first try to land on their own preview spot (such as
-        // "Reaching Me" or an Office facts row) before falling back to the
-        // nearest section heading.
-        const previewSearch = focusedBox ? null : (target && typeof target.closest === "function"
-          ? target.closest("[data-preview-search]")?.dataset.previewSearch
-          : null);
-        if (previewSearch) {
-          const searchLower = previewSearch.toLowerCase();
-          const exact = (searchLower === "office" || searchLower === "office hours");
-          const match = [...paper.querySelectorAll("h2, h3, th, td, tr, p, li")]
-            .find((el) => exact
-              ? (el.textContent || "").trim().toLowerCase() === searchLower
-              : (el.textContent || "").toLowerCase().includes(searchLower));
-          if (match) {
-            const scroller = previewScroller();
-            const spot = scroller && previewSpot(match, scroller);
-            if (spot && !spot.visible) scroller.scrollTo({ top: Math.max(0, spot.top - 30), behavior: "smooth" });
-            return;
-          }
-        }
-        const standardHeading = [...paper.querySelectorAll("h2, h3")]
-          .find((h) => h.innerText.trim() === SECTION_FOR_TAB[tab]);
-        const scroller = previewScroller();
-        const spot = standardHeading && scroller && previewSpot(standardHeading, scroller);
-        if (spot && !spot.visible) scroller.scrollTo({ top: Math.max(0, spot.top - 30), behavior: "smooth" });      });
-      void previewT;
+    if (!form) return undefined;
+    const follow = (event) => {
+      if (skipNextFocusScrollRef.current) { skipNextFocusScrollRef.current = false; return; }
+      const key = srcOf(event.target);
+      if (!key) return;
+      activeSrc.current = key;
+      requestAnimationFrame(() => revealInPreview(key, { caret: caretShare(document.activeElement) }));
     };
-    form.addEventListener("focusin", handleFocus);
-    return () => form.removeEventListener("focusin", handleFocus);
-  }, [tab]);
+    form.addEventListener("focusin", follow);
+    form.addEventListener("pointerdown", follow);
+    return () => { form.removeEventListener("focusin", follow); form.removeEventListener("pointerdown", follow); };
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { activeSrc.current = null; }, [tab]);
 
   const set = (k, v) => {
     setD((p) => ({ ...p, [k]: v }));
@@ -1629,10 +1545,10 @@ export default function SyllabusBuilder() {
           credits: payload.credits || p.credits,
           modality: payload.modality || p.modality,
           // clear these instead of keeping old values from a different course
-          // Banner gives days and times as one string, so put it in Meeting time
-          // and clear the days dropdown so it doesn't show twice
-          meetingTime: payload.meeting || "",
-          ...(payload.meeting ? { meetingPattern: "", meeting: "" } : {}),
+          // days go to the day buttons (shared with the Schedule tab), the time to Meeting time;
+          // if the meetings have different times, Meeting time gets the full "days, time; days, time"
+          meetingTime: payload.time || payload.meeting || "",
+          meetDays: Array.isArray(payload.days) ? [...payload.days].sort(byWeek) : p.meetDays,
           location: payload.location || "",
           // use our department list first, Banner's names are shortened and don't match the dropdown
           dept: SUBJECT_DEPARTMENTS.get(subject) || payload.dept || "",
@@ -1703,8 +1619,7 @@ export default function SyllabusBuilder() {
     flushSync(() => setD((p) => ({ ...p, [k]: [...(p[k] || []), obj] })));
     const added = [...(formRef.current?.querySelectorAll(`[data-box-key="${k}"]`) || [])].at(-1);
     const grow = added && foldIn(added);
-    // Save (and reserve) a pixel position for this text box before it renders.
-    savedBoxOffsets.current[`${k}-${newItemIndex}`] = newItemIndex * boxStepFor(k);
+    activeSrc.current = `${k}:${newItemIndex}`; // typing in the new box keeps the preview following it
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
       const container = formRef.current;
@@ -1712,18 +1627,13 @@ export default function SyllabusBuilder() {
       const boxes = [...container.querySelectorAll(`[data-box-key="${k}"]`)];
       const last = boxes[boxes.length - 1];
       if (!last) return;
-      const id = `${k}-${newItemIndex}`;
-      const scroller = formScroller();
-      const base = scroller ? scroller.getBoundingClientRect().top : 0;
-      const pixels = last.getBoundingClientRect().top - base + (scroller ? scroller.scrollTop : window.scrollY) - 60;
-      formBoxPositions.current[id] = Math.max(0, pixels);
       // the new box grows open, then the form glides just far enough to show it (no jump)
       const reduce = reduceMotion();
       const reveal = () => last.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
       if (grow) grow.finished.then(reveal, () => {}); else reveal();
-      // keep the preview aligned with the section's heading
+      // an empty box isn't in the preview yet, so this lands on its section (custom descriptions have none)
       if (k !== "customDescriptions") scrollPreviewToBox(k, newItemIndex, reduce ? "auto" : "smooth");
-      const field = last.querySelector("input, textarea, select");
+      const field = last.querySelector("input, textarea, select, [contenteditable]");
       if (field) {
         skipNextFocusScrollRef.current = true;
         field.focus({ preventScroll: true });
@@ -1796,7 +1706,7 @@ export default function SyllabusBuilder() {
       ...p.lab,
       meetDays: (p.lab.meetDays || []).includes(n)
         ? p.lab.meetDays.filter((x) => x !== n)
-        : [...(p.lab.meetDays || []), n].sort(),
+        : [...(p.lab.meetDays || []), n].sort(byWeek),
     },
   }));
 
@@ -1925,6 +1835,25 @@ export default function SyllabusBuilder() {
   // With meeting days picked, week rows and their dates come from the registrar
   // calendar; topics and due dates still come from d.weeks by position.
   const cal = ACADEMIC_CALENDARS[d.term];
+  // "Summer 2027 (Part of Term 1)" is listed on utm.edu as "Summer 2027"
+  const regTerm = String(d.term || "").replace(/\s*\(.*\)$/, "");
+  const liveDates = registrar.terms[d.term] || registrar.terms[regTerm];
+  const savedDates = SAVED_REGISTRAR_DATES[d.term];
+  const regDates = liveDates || savedDates || null;
+  // live: from utm.edu; saved: our copy because utm.edu failed or doesn't list it; none: nothing to add
+  const regSource = liveDates ? "live" : savedDates && registrar.status !== "loading" ? "saved" : savedDates ? "loading" : "none";
+  // the schedule's week dates come from ACADEMIC_CALENDARS, so check its first day against utm.edu's
+  const MONTH_NUM = Object.fromEntries(MONTHS.map((m, i) => [m, i + 1]));
+  const liveStart = liveDates?.find(([, what]) => /classes begin|first day of classes/i.test(what))?.[0].match(/([A-Z][a-z]+)\.?\s+(\d{1,2})/);
+  const startMismatch = Boolean(cal && liveStart && MONTH_NUM[liveStart[1]]
+    && (MONTH_NUM[liveStart[1]] !== Number(cal.start.slice(5, 7)) || Number(liveStart[2]) !== Number(cal.start.slice(8, 10))));
+  const regWarning = registrar.status === "failed"
+    ? `Couldn't reach the registrar's calendar on utm.edu${savedDates ? ", so these are saved dates and may be out of date." : ", so no dates were added."}`
+    : registrar.status === "ok" && !liveDates
+      ? `${d.term} isn't on utm.edu's academic calendar${savedDates ? ", so these are saved dates and may be out of date." : ", so no dates were added."}`
+      : startMismatch
+        ? `utm.edu says classes begin ${liveStart[0]}, but the schedule's week dates start ${MONTHS[Number(cal.start.slice(5, 7)) - 1]} ${Number(cal.start.slice(8, 10))}. Check the week dates.`
+        : "";
   const autoWeeks = useMemo(() => buildWeeks(cal, d.meetDays), [cal, d.meetDays]);
   // Modular schedules are hand-built, so the registrar calendar drives weekly ones only.
   const auto = d.scheduleType !== "modular" && !String(d.scheduleType).startsWith("summer") && autoWeeks.length > 0;
@@ -1966,7 +1895,7 @@ export default function SyllabusBuilder() {
     prevWeeksRef.current = countedWeeks;
   }, [countedWeeks]);
   const toggleDay = (n) => set("meetDays",
-    d.meetDays.includes(n) ? d.meetDays.filter((x) => x !== n) : [...d.meetDays, n].sort());
+    d.meetDays.includes(n) ? d.meetDays.filter((x) => x !== n) : [...d.meetDays, n].sort(byWeek));
 
   // Determine whether this is a weekly or modular schedule.
   const isWeeklySchedule = d.scheduleType !== "modular";
@@ -2027,16 +1956,12 @@ export default function SyllabusBuilder() {
         ? `Schedule has ${schedRows.length} of ${expectedWeekCount} weeks`
         : `Week${missingWeeks.length > 1 ? "s" : ""} ${formatWeekRanges(missingWeeks)} missing topics`;
 
-  const selectedMeetingPattern = MEETING_PATTERNS.find(
-    (pattern) => pattern.value === d.meetingPattern
-  );
-  const meetingDays = d.meetingPattern === "custom"
-    ? String(d.meeting || "").trim()
-    : selectedMeetingPattern?.label || "";
-  const meetingDisplay = [meetingDays, String(d.meetingTime || "").trim()]
-   .filter(Boolean)
-   .join(", ") || String(d.meeting || "").trim();
-  const labMeetingDays = (d.lab.meetDays || []).map((day) => DAY_NAMES[day]).join(", ");
+  // days from the day buttons, unless Meeting time already names them
+  const meetingTimeText = String(d.meetingTime || "").trim();
+  const meetingDays = /monday|tuesday|wednesday|thursday|friday|saturday|sunday/i.test(meetingTimeText)
+    ? "" : [...d.meetDays].sort(byWeek).map((day) => DAY_NAMES[day]).join(", ");
+  const meetingDisplay = [meetingDays, meetingTimeText].filter(Boolean).join(", ");
+  const labMeetingDays = [...(d.lab.meetDays || [])].sort(byWeek).map((day) => DAY_NAMES[day]).join(", ");
   const labMeetingDisplay = [labMeetingDays, String(d.lab.meeting || "").trim()]
     .filter(Boolean)
     .join(", ") || String(d.lab.meeting || "").trim();
@@ -2070,6 +1995,7 @@ export default function SyllabusBuilder() {
     ["Academic integrity included", d.inc.integrity, "University"],
     ["Crisis resources included", d.inc.crisis, "University"],
     ["Schedule has at least one entry", auto || d.weeks.some((w) => hasText(w.topics) || hasText(w.dates)), "Schedule"],
+    ...(d.calNote ? [["Registrar dates confirmed on utm.edu", regSource === "live" && !startMismatch, "Schedule"]] : []),
     ...(isWeeklySchedule ? [
       [
         missingWeeks.length === 0
@@ -2318,54 +2244,57 @@ export default function SyllabusBuilder() {
   const docBody = useMemo(() => {
     const h = [];
     const sec = (t) => h.push(`<h2>${esc(t)}</h2>`);
+    // data-src names the form field(s) each piece came from, so the preview can follow what's being edited
+    // (space-separated; boxes are "key:index"). Exports strip it.
+    const tag = (src, html) => `<div data-src="${src}">${html}</div>`;
 
     h.push(`<table class="hdr" role="presentation"><tr>
       <td class="hdr-l"><img src="${LOGO}" alt="The University of Tennessee at Martin" width="230"/></td>
-      <td class="hdr-r"><div class="ct">${esc(d.code || "COURSE 000")}</div>
-      <h1 class="tt">${esc(d.title || "Course Title")}</h1>
-      <div class="st">${esc(d.term)}${d.modality ? " &nbsp;|&nbsp; " + esc(d.modality) : ""}${d.dept && d.dept !== "Select a department..." ? " &nbsp;|&nbsp; " + esc(d.dept) : ""}</div></td></tr></table>`);
+      <td class="hdr-r"><div class="ct" data-src="code">${esc(d.code || "COURSE 000")}</div>
+      <h1 class="tt" data-src="title">${esc(d.title || "Course Title")}</h1>
+      <div class="st" data-src="term modality dept">${esc(d.term)}${d.modality ? " &nbsp;|&nbsp; " + esc(d.modality) : ""}${d.dept && d.dept !== "Select a department..." ? " &nbsp;|&nbsp; " + esc(d.dept) : ""}</div></td></tr></table>`);
 
     // Course facts
     const facts = [
-      ["Course", `${d.code} ${d.title}`.trim()],
-      ["CRN", d.crn],
-      ["Section", d.section],
-      ["Term", d.term],
-      ["Delivery", d.modality],
-      ["Semester Length", d.semester],
-      ["Credit hours", d.credits],
-      ["Meeting time", meetingDisplay],
-      ["Location", d.location],
-      ["Extra Location", d.exlocation],
-      ["Prerequisites", d.prereq],
-      ["Instructor", d.instructor],
-      ["Email", d.email],
-      ["Phone", d.phone],
-      ["Office", d.office],
-      ["Office hours", d.hours],
+      ["Course", `${d.code} ${d.title}`.trim(), "code title"],
+      ["CRN", d.crn, "crn"],
+      ["Section", d.section, "section"],
+      ["Term", d.term, "term"],
+      ["Delivery", d.modality, "modality"],
+      ["Semester Length", d.semester, "semester"],
+      ["Credit hours", d.credits, "credits"],
+      ["Meeting time", meetingDisplay, "meetDays meetingTime"],
+      ["Location", d.location, "location"],
+      ["Extra Location", d.exlocation, "exlocation"],
+      ["Prerequisites", d.prereq, "prereq"],
+      ["Instructor", d.instructor, "instructor"],
+      ["Email", d.email, "email"],
+      ["Phone", d.phone, "phone"],
+      ["Office", d.office, "office"],
+      ["Office hours", d.hours, "hours"],
     ].filter((r) => r[1] && String(r[1]).trim());
     if (facts.length) {
       sec("Course Information");
       h.push(`<table class="grid">${facts.map((r) =>
-        `<tr><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>`);
+        `<tr data-src="${r[2]}"><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>`);
     }
 
-    if (d.welcome) { sec("Welcome to This Course"); h.push(para(d.welcome)); }
-    if (d.description) { sec("Course Description"); h.push(para(d.description)); }
-     d.customDescriptions.forEach((item, i) => {
-       if (item.title.trim() || item.description.trim()) {
-         h.push(`<h2 data-preview-key="customDescriptions" data-preview-index="${i}">${esc(item.title.trim() || "Custom Course Description")}</h2>`);
-         if (item.description.trim()) h.push(para(item.description));
-       }
-     });
+    if (d.welcome) { sec("Welcome to This Course"); h.push(tag("welcome", para(d.welcome))); }
+    if (d.description) { sec("Course Description"); h.push(tag("description", para(d.description))); }
+    d.customDescriptions.forEach((item, i) => {
+      if (item.title.trim() || item.description.trim()) {
+        h.push(tag(`customDescriptions:${i}`, `<h2>${esc(item.title.trim() || "Custom Course Description")}</h2>${
+          item.description.trim() ? para(item.description) : ""}`));
+      }
+    });
 
     if (realOutcomes.length || d.showPrimer) {
       sec("Student Learning Outcomes");
-      if (d.showPrimer) h.push(`<div class="primer"><div class="primer-h">For the instructor: what an SLO is and why it is here</div>${para(SLO_PRIMER)}</div>`);
+      if (d.showPrimer) h.push(`<div class="primer" data-src="showPrimer"><div class="primer-h">For the instructor: what an SLO is and why it is here</div>${para(SLO_PRIMER)}</div>`);
       if (realOutcomes.length) {
         h.push(`<p>By the end of this course, you should be able to:</p><ol>${
           d.outcomes.map((o, i) => o.trim()
-            ? `<li data-preview-key="outcomes" data-preview-index="${i}">${esc(o)}</li>`
+            ? `<li data-src="outcomes:${i}">${esc(o)}</li>`
             : "").join("")}</ol>`);
       }
     }
@@ -2377,8 +2306,8 @@ export default function SyllabusBuilder() {
     );
     if (d.texts || d.costNote || d.tech || hasAccess || customMaterials.length) {
       sec("Required Materials");
-      if (d.texts) h.push(para(d.texts));
-      if (d.costNote) h.push(`<p class="soft">${esc(d.costNote)}</p>`);
+      if (d.texts) h.push(tag("texts", para(d.texts)));
+      if (d.costNote) h.push(`<p class="soft" data-src="costNote">${esc(d.costNote)}</p>`);
       if (hasAccess) {
         const lines = [];
         if (m.provided) lines.push("These materials will be provided to you at no additional cost.");
@@ -2386,12 +2315,13 @@ export default function SyllabusBuilder() {
           : m.hardcopy ? "hardcopy" : m.online ? "online" : "";
         if (fmt) lines.push(`Format: available in ${fmt}.`);
         if (m.acquire) lines.push(`Where to acquire: ${m.acquire}`);
-        h.push(`<ul>${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`);
+        h.push(`<ul data-src="materials">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`);
       }
-      if (d.tech) { h.push(`<h3>Technology you will need</h3>`); h.push(para(d.tech)); }
-      customMaterials.forEach((material) => {
-        if (material.title) h.push(`<h3>${esc(material.title)}</h3>`);
-        if (material.description) h.push(para(material.description));
+      if (d.tech) h.push(tag("tech", `<h3>Technology you will need</h3>${para(d.tech)}`));
+      d.extraMaterials.forEach((material, i) => {
+        if (!material.title.trim() && !material.description.trim()) return;
+        h.push(tag(`extraMaterials:${i}`, `${material.title ? `<h3>${esc(material.title)}</h3>` : ""}${
+          material.description ? para(material.description) : ""}`));
       });
     }
 
@@ -2400,86 +2330,95 @@ export default function SyllabusBuilder() {
     if (live.length) {
       const hasDueDates = live.some((x) => x.due?.trim());
       sec("Assessment and Grading");
-      h.push(`<table class="grid"><tr><th scope="col">Assignment or category</th><th scope="col" class="w">${isPoints ? "Points" : "Weight"}</th>${hasDueDates ? '<th scope="col" class="assignment-due">Due date</th>' : ""}<th scope="col">What it is</th></tr>${live.map((x) => `<tr><td><strong>${esc(x.name)}</strong>${x.slos.length ? `<div class="tag">Outcome${x.slos.length > 1 ? "s" : ""} ${x.slos.map((i) => i + 1).join(", ")}</div>` : ""
+      h.push(`<table class="grid"><tr><th scope="col">Assignment or category</th><th scope="col" class="w">${isPoints ? "Points" : "Weight"}</th>${hasDueDates ? '<th scope="col" class="assignment-due">Due date</th>' : ""}<th scope="col">What it is</th></tr>${live.map((x) => `<tr data-src="items:${d.items.indexOf(x)}"><td><strong>${esc(x.name)}</strong>${x.slos.length ? `<div class="tag">Outcome${x.slos.length > 1 ? "s" : ""} ${x.slos.map((i) => i + 1).join(", ")}</div>` : ""
         }</td><td class="w">${isPoints
           ? fmtWeight(parseWeight(x.points))
           : `${fmtWeight(parseWeight(x.weight))}%`}</td>${hasDueDates ? `<td class="assignment-due">${esc(x.due || "")}</td>` : ""}<td>${esc(x.desc)}</td></tr>`).join("")
         }<tr class="tot"><td>Total</td><td class="w">${isPoints
           ? fmtWeight(pointsTotal)
           : `${fmtWeight(weightTotal)}%`}</td>${hasDueDates ? "<td></td>" : ""}<td></td></tr></table>`);
-      if (d.scale) { h.push(`<h3>Grading scale</h3>`); h.push(para(d.scale)); }
+      if (d.scale) h.push(tag("scale", `<h3>Grading scale</h3>${para(d.scale)}`));
     }
 
     if (d.hasLab) {
       const L = d.lab;
       sec("Laboratory Component");
       const lf = [
-        ["Lab section / CRN", L.crn],
-        ["Lab meeting time", labMeetingDisplay],
-        ["Lab location", L.location],
-        ["Lab instructor", L.instructor],
+        ["Lab section / CRN", L.crn, "lab.crn"],
+        ["Lab meeting time", labMeetingDisplay, "lab.meetDays lab.meeting"],
+        ["Lab location", L.location, "lab.location"],
+        ["Lab instructor", L.instructor, "lab.instructor"],
       ].filter((r) => r[1] && String(r[1]).trim());
       if (lf.length) h.push(`<table class="grid">${lf.map((r) =>
-        `<tr><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>`);
-      if (L.description) h.push(para(L.description));
+        `<tr data-src="${r[2]}"><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>`);
+      if (L.description) h.push(tag("lab.description", para(L.description)));
       [
-        ["How the Lab Counts Toward Your Grade", L.gradeNote],
-        ["Lab Attendance", L.attendance],
-        ["Lab Safety", L.safety],
-        ["Supplies and Protective Equipment", L.supplies],
-        ["Missed Labs and Make-Up", L.makeup],
-      ].forEach(([t, b]) => {
-        if (b && b.trim()) { h.push(`<h3>${esc(t)}</h3>`); h.push(para(b)); }
+        ["How the Lab Counts Toward Your Grade", L.gradeNote, "lab.gradeNote"],
+        ["Lab Attendance", L.attendance, "lab.attendance"],
+        ["Lab Safety", L.safety, "lab.safety"],
+        ["Supplies and Protective Equipment", L.supplies, "lab.supplies"],
+        ["Missed Labs and Make-Up", L.makeup, "lab.makeup"],
+      ].forEach(([t, b, src]) => {
+        if (b && b.trim()) h.push(tag(src, `<h3>${esc(t)}</h3>${para(b)}`));
       });
     }
 
     const pol = [];
-    if (d.attendance) pol.push(["Attendance and Participation", d.attendance]);
-    if (d.participation) pol.push(["What Engagement Looks Like Here", d.participation]);
-    if (lateText) pol.push(["Late Work and Make-Up Policy", lateText]);
+    if (d.attendance) pol.push(["Attendance and Participation", d.attendance, "attendance"]);
+    if (d.participation) pol.push(["What Engagement Looks Like Here", d.participation, "participation"]);
+    if (lateText) pol.push(["Late Work and Make-Up Policy", lateText, ["late", ...d.lateAdditional.map((_, i) => `lateAdditional:${i}`)].join(" ")]);
     if (d.subjectLine || d.address)
       pol.push(["Reaching Me", [
         d.subjectLine && `Use this subject line on every email: ${d.subjectLine}`,
         d.address && `You can address me as ${d.address}.`,
-      ].filter(Boolean).join("\n")]);
-    if (aiText.trim()) pol.push(["Artificial Intelligence Policy", aiText]);
+      ].filter(Boolean).join("\n"), "subjectLine address"]);
+    if (aiText.trim()) pol.push(["Artificial Intelligence Policy", aiText, "ai"]);
       const customPolicies = d.customPolicies.filter((policy) => policy.title.trim() || policy.text.trim());
       if (pol.length || customPolicies.length) {
       sec("Course Policies");
-      pol.forEach(([t, b]) => { h.push(`<h3>${esc(t)}</h3>`); h.push(para(b)); });
-      if (d.profNote) h.push(`<div class="pnote"><strong>A note from your professor.</strong> ${esc(d.profNote)}</div>`);
-        d.customPolicies.forEach((policy, i) => {
+      pol.forEach(([t, b, src]) => h.push(tag(src, `<h3>${esc(t)}</h3>${para(b)}`)));
+      if (d.profNote) h.push(`<div class="pnote" data-src="profNote"><strong>A note from your professor.</strong> ${esc(d.profNote)}</div>`);
+      d.customPolicies.forEach((policy, i) => {
         if (policy.title.trim() || policy.text.trim()) {
-          if (policy.title.trim()) h.push(`<h3 data-preview-key="customPolicies" data-preview-index="${i}">${esc(policy.title)}</h3>`);
-          if (policy.text.trim()) h.push(para(policy.text));
+          h.push(tag(`customPolicies:${i}`, `${policy.title.trim() ? `<h3>${esc(policy.title)}</h3>` : ""}${
+            policy.text.trim() ? para(policy.text) : ""}`));
         }
-        });
+      });
     }
 
     const uni = Object.keys(LOCKED).filter((k) => d.inc[k]);
     if (uni.length) {
       sec("University Policies and Student Support");
-      uni.forEach((k) => { h.push(`<h3>${esc(LOCKED[k].title)}</h3>`); h.push(para(LOCKED[k].text)); });
+      uni.forEach((k) => h.push(tag(`inc.${k}`, `<h3>${esc(LOCKED[k].title)}</h3>${para(LOCKED[k].text)}`)));
     }
 
-    const wk = schedRows.filter((w) => w.label || w.topics || w.dates);
+    const wk = schedRows.map((w, i) => ({ ...w, i })).filter((w) => w.label || w.topics || w.dates);
     if (wk.length) {
       sec("Course Schedule");
-      h.push(`<table class="grid"><tr><th scope="col" class="wk">${d.scheduleType === "modular" ? "Module" : "Week"}</th><th scope="col">Topics and Readings</th><th scope="col" class="due">Due</th></tr>${
-        wk.map((w) => `<tr><td class="wk"><strong>${esc(w.label)}</strong>${w.dates ? `<br/><span class="soft">${esc(w.dates)}</span>` : ""}</td><td>${
+      h.push(`<table class="grid" data-src="scheduleType semesterStart meetDays"><tr><th scope="col" class="wk">${d.scheduleType === "modular" ? "Module" : "Week"}</th><th scope="col">Topics and Readings</th><th scope="col" class="due">Due</th></tr>${
+        wk.map((w) => `<tr data-src="weeks:${w.i}"><td class="wk"><strong>${esc(w.label)}</strong>${w.dates ? `<br/><span class="soft">${esc(w.dates)}</span>` : ""}</td><td>${
           w.off.map((o) => `<div class="off">${esc(o)}</div>`).join("")}${esc(w.topics).replace(/\n/g, "<br/>")}</td><td class="due">${esc(w.due).replace(/\n/g, "<br/>")}</td></tr>`).join("")
       }</table>`);
     }
 
-    if (d.calNote && d.term === "Spring 2027") {
-      sec("Spring 2027 Dates You Should Know");
-      h.push(`<table class="grid">${Spring_2027.map((r) =>
+    if (d.calNote && regDates) {
+      sec(`${d.term} Dates You Should Know`);
+      h.push(`<table class="grid" data-src="calNote">${regDates.map((r) =>
         `<tr><th scope="row" class="wk">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>
         <p class="soft">Registrar's calendar, subject to change. Confirm at utm.edu/academics/academic-calendar/</p>`);
     }
 
     return h.join("");
-  }, [d, weightTotal, pointsTotal, realOutcomes, aiText, meetingDisplay, labMeetingDisplay, schedRows]);
+  }, [d, weightTotal, pointsTotal, realOutcomes, aiText, meetingDisplay, labMeetingDisplay, schedRows, regDates]);
+
+  // typing: once the preview has the new text, keep the part being edited in view
+  useEffect(() => {
+    const key = activeSrc.current;
+    const el = document.activeElement;
+    if (!key || !formRef.current?.contains(el) || srcOf(el) !== key) return undefined;
+    const frame = requestAnimationFrame(() => revealInPreview(key, { caret: caretShare(el) }));
+    return () => cancelAnimationFrame(frame);
+  }, [docBody]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const DOC_CSS = `
     body{font-family:Cambria,Georgia,serif;font-size:11pt;line-height:1.5;color:#1a1a1a;margin:0}
@@ -2549,7 +2488,7 @@ export default function SyllabusBuilder() {
     `<html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head>
     <meta charset="utf-8"/><title>${esc(pdfFilename())}</title>
      <style>@page{size:8.5in 11in;margin:0.8in}${DOC_CSS}</style></head>
-     <body><div class="page">${docBody}</div></body></html>`;
+     <body><div class="page">${docBody.replace(/ data-src="[^"]*"/g, "")}</div></body></html>`;
 
   /** Downloads a generated browser Blob without sending it to a server. */
   const dl = (blob, name) => {
@@ -2802,7 +2741,7 @@ export default function SyllabusBuilder() {
             <H>Course</H>
             <div className="flex gap-3 flex-wrap items-end">
               <div style={{ flex: "1 1 150px" }}>
-                <Field label="Course code">
+                <Field src="code" label="Course code">
                   <div ref={codeSuggestRef} className={`dropdown${codeSuggestOpen ? " is-open" : ""}`}>
                     <div className="dropdown-control">
                     <input
@@ -2828,7 +2767,7 @@ export default function SyllabusBuilder() {
                 </Field>
               </div>
               <div style={{ flex: "1 1 130px" }}>
-                <Field label="Section">
+                <Field src="section" label="Section">
                   <div ref={sectionSuggestRef} className={`dropdown${sectionSuggestOpen ? " is-open" : ""}`}>
                     <div className="dropdown-control">
                     <input
@@ -2857,14 +2796,14 @@ export default function SyllabusBuilder() {
               </div>
             </div>
             <div className="flex gap-3 flex-wrap">
-              <div style={{ flex: "2 1 240px" }}><Field label="Course title"><T value={d.title} onChange={(v) => set("title", v)} placeholder="American Foreign Policy" /></Field></div>
+              <div style={{ flex: "2 1 240px" }}><Field src="title" label="Course title"><T value={d.title} onChange={(v) => set("title", v)} placeholder="American Foreign Policy" /></Field></div>
               <div style={{ flex: "0 0 100px" }}>
-                <Field label="CRN"><T value={d.crn} onChange={(v) => set("crn", v.replace(/\D/g, "").slice(0, 5))} placeholder="12345" /></Field>
+                <Field src="crn" label="CRN"><T value={d.crn} onChange={(v) => set("crn", v.replace(/\D/g, "").slice(0, 5))} placeholder="12345" /></Field>
               </div>
             </div>
             <div className="flex gap-3 flex-wrap">
               <div style={{ flex: "1 1 130px" }}>
-                <Field label="Term" hint="used for the lookup too">
+                <Field src="term" label="Term" hint="used for the lookup too">
                   {/* terms come from Banner so new ones show up on their own */}
                   <Dropdown value={d.term} onChange={(v) => set("term", v)} placeholder="Select a term"
                     ariaLabel="Term" maxHeight={220}
@@ -2874,46 +2813,37 @@ export default function SyllabusBuilder() {
                     })()} />
                 </Field>
               </div>
-              <div style={{ flex: "1 1 130px" }}><Field label="Credit hours"><T value={d.credits} onChange={(v) => set("credits", v)} /></Field></div>
+              <div style={{ flex: "1 1 130px" }}><Field src="credits" label="Credit hours"><T value={d.credits} onChange={(v) => set("credits", v)} /></Field></div>
             </div>
-            <Field label="Semester length" hint="students read this before they register">
+            <Field src="semester" label="Semester length" hint="students read this before they register">
               <Dropdown value={d.semester || ""} onChange={(v) => set("semester", v)} ariaLabel="Semester length" placeholder="Select semester length"
                 options={["Full Semester", "Half of a Semester", "Third of a Semester"].map((m) => ({ value: m, label: m }))} />
             </Field>
-            <Field label="Delivery" hint="students read this before they register">
+            <Field src="modality" label="Delivery" hint="students read this before they register">
               <Dropdown value={d.modality} onChange={(v) => set("modality", v)} ariaLabel="Delivery"
                 options={["In person", "Hybrid", "Online synchronous", "Online asynchronous", "Dual Enrollment", "Internship"].map((m) => ({ value: m, label: m }))} />
             </Field>
-                        <Field label="Meeting days" hint="leave blank if fully asynchronous">
-              <Dropdown value={d.meetingPattern || ""} onChange={(v) => set("meetingPattern", v)}
-                placeholder="Select meeting days" ariaLabel="Meeting days" options={MEETING_PATTERNS} />
+            {/* the same days the Schedule tab dates its weeks from */}
+            <Field src="meetDays" label="Meeting days" hint="leave blank if fully asynchronous">
+              <DayPicker days={d.meetDays} onToggle={toggleDay} />
             </Field>
-            {d.meetingPattern === "custom" && (
-              <Field label="Custom meeting days">
-                <T
-                  value={d.meeting}
-                  onChange={(v) => set("meeting", v)}
-                  placeholder="Monday and Thursday"
-                />
-              </Field>
-            )}
-            <Field label="Meeting time" hint="leave blank if fully asynchronous">
+            <Field src="meetingTime" label="Meeting time" hint="leave blank if fully asynchronous">
               <T
                 value={d.meetingTime || ""}
                 onChange={(v) => set("meetingTime", v)}
                 placeholder="9:30 to 10:45 a.m."
               />
             </Field>
-            <Field label="Room"><T value={d.location} onChange={(v) => set("location", v)} placeholder="Humanities 407" /></Field>
-            <Field label="Other meeting room" hint="Only fill this if some classes take place in other room during the week"><T value={d.exlocation} onChange={(v) => set("exlocation", v)} placeholder="Humanities 409 on Fridays" /></Field>
-            <Field label="Department" hint="type freely, or pick from the list">
+            <Field src="location" label="Room"><T value={d.location} onChange={(v) => set("location", v)} placeholder="Humanities 407" /></Field>
+            <Field src="exlocation" label="Other meeting room" hint="Only fill this if some classes take place in other room during the week"><T value={d.exlocation} onChange={(v) => set("exlocation", v)} placeholder="Humanities 409 on Fridays" /></Field>
+            <Field src="dept" label="Department" hint="type freely, or pick from the list">
               <Dropdown editable value={d.dept} onChange={(v) => set("dept", v)} placeholder="Department of Computer Science"
                 ariaLabel="Department" options={DEPARTMENTS.flatMap((g) => [
                   { header: g.college },
                   ...g.names.map((name) => ({ value: `Department of ${name}`, label: name })),
                 ])} />
             </Field>
-            <Field label="Prerequisites"><T value={d.prereq} onChange={(v) => set("prereq", v)} placeholder="None" /></Field>
+            <Field src="prereq" label="Prerequisites"><T value={d.prereq} onChange={(v) => set("prereq", v)} placeholder="None" /></Field>
           </>)}
 
           {tab === 1 && (<>
@@ -2922,13 +2852,13 @@ export default function SyllabusBuilder() {
               Office hours are the most under-used thing on a syllabus. Students who work shifts or commute from Dresden or Union City
               often can't make a midday block, so naming an alternative, even "email me and we'll find a time," changes who shows up.
             </Caption>
-            <Field label="Your name"><T value={d.instructor} onChange={(v) => set("instructor", v)} placeholder="Dr. Jane Doe" /></Field>
-            <Field label="Email"><T value={d.email} onChange={(v) => set("email", v)} onBlur={() => {const email = d.email.trim(); set("email", email ? (email.endsWith("@") ? `${email}utm.edu` : email.includes("@") ? email : `${email}@utm.edu`) : "");}} placeholder="jdoe (autofills @utm.edu)" /></Field>
-            <Field label="Phone"><T type="tel" value={d.phone} onChange={(v) => set("phone", v)} placeholder="731-555-0123" /></Field>
-            <Field label="Office"><T value={d.office} onChange={(v) => set("office", v)} placeholder="Humanities 212" /></Field>
-            <Field label="Office hours"><A rows={2} value={d.hours} onChange={(v) => set("hours", v)} placeholder="Monday and Wednesday, 10 a.m. to noon, and by appointment. Email me and we will find a time that works." /></Field>
-            <Field label="Email subject line you want" hint="cuts your response time"><T value={d.subjectLine} onChange={(v) => { subjectLineAutoRef.current = false; set("subjectLine", v); }} placeholder="POSC 322 - [your question]" /></Field>
-            <Field label="How students should address you"><T value={d.address} onChange={(v) => set("address", v)} placeholder="Dr. Doe" /></Field>
+            <Field src="instructor" label="Your name"><T value={d.instructor} onChange={(v) => set("instructor", v)} placeholder="Dr. Jane Doe" /></Field>
+            <Field src="email" label="Email"><T value={d.email} onChange={(v) => set("email", v)} onBlur={() => {const email = d.email.trim(); set("email", email ? (email.endsWith("@") ? `${email}utm.edu` : email.includes("@") ? email : `${email}@utm.edu`) : "");}} placeholder="jdoe (autofills @utm.edu)" /></Field>
+            <Field src="phone" label="Phone"><T type="tel" value={d.phone} onChange={(v) => set("phone", v)} placeholder="731-555-0123" /></Field>
+            <Field src="office" label="Office"><T value={d.office} onChange={(v) => set("office", v)} placeholder="Humanities 212" /></Field>
+            <Field src="hours" label="Office hours"><A rows={2} value={d.hours} onChange={(v) => set("hours", v)} placeholder="Monday and Wednesday, 10 a.m. to noon, and by appointment. Email me and we will find a time that works." /></Field>
+            <Field src="subjectLine" label="Email subject line you want" hint="cuts your response time"><T value={d.subjectLine} onChange={(v) => { subjectLineAutoRef.current = false; set("subjectLine", v); }} placeholder="POSC 322 - [your question]" /></Field>
+            <Field src="address" label="How students should address you"><T value={d.address} onChange={(v) => set("address", v)} placeholder="Dr. Doe" /></Field>
           </>)}
 
           {tab === 2 && (<>
@@ -2937,11 +2867,11 @@ export default function SyllabusBuilder() {
               The description is what the catalog says. The welcome is what you say, and it shapes how students read
               everything after it, so it's worth four sentences in your own voice.
             </Caption>
-            <Field label="Why this course matters" hint="your voice, not the catalog">
+            <Field src="welcome" label="Why this course matters" hint="your voice, not the catalog">
               <A rows={6} value={d.welcome} onChange={(v) => set("welcome", v)}
                 placeholder="Foreign policy is not something that happens far away in diplomatic corridors. It shapes the price of the goods you buy, the security of the country you live in, and the reputation the United States carries around the world. This course is built around that reality." />
             </Field>
-            <Field label="Course description"><A rows={5} value={d.description} onChange={(v) => set("description", v)} placeholder="Paste the description from the UTM catalog." /></Field>
+            <Field src="description" label="Course description"><A rows={5} value={d.description} onChange={(v) => set("description", v)} placeholder="Paste the description from the UTM catalog." /></Field>
             <div className="section-title">Custom course descriptions</div>
             {(d.customDescriptions || []).map((item, i) => (
               <CardField key={i} data-box-key="customDescriptions" data-box-index={i}
@@ -2957,7 +2887,7 @@ export default function SyllabusBuilder() {
           {tab === 3 && (<>
             <H>Learning outcomes</H>
             <div className="group-box">
-              <SwitchRow checked={d.showPrimer} onChange={(on) => set("showPrimer", on)}>Include the explainer box</SwitchRow>
+              <SwitchRow src="showPrimer" checked={d.showPrimer} onChange={(on) => set("showPrimer", on)}>Include the explainer box</SwitchRow>
               <div className="group-note">
                 It tells a new faculty member what an SLO is, how to test one, and why the Gen Ed outcomes belong here.
                 Turn it off, or delete the box in Word, once your outcomes are written.
@@ -2996,16 +2926,16 @@ export default function SyllabusBuilder() {
 
           {tab === 4 && (<>
             <H>Materials</H>
-            <Field label="Required texts"><A rows={4} value={d.texts} onChange={(v) => set("texts", v)} placeholder="Hastedt, G. P. (2020). American Foreign Policy: Past, Present, and Future (12th ed.). Rowman and Littlefield." /></Field>
-            <Field label="Cost note" hint="tell them the real number, and the free path if there is one"><A rows={2} value={d.costNote} onChange={(v) => set("costNote", v)} placeholder="The textbook runs about $60 used. A copy is on reserve at Paul Meek Library. Tell me before the second week if cost is a barrier." /></Field>
-            <Field label="Technology and platforms"><A rows={3} value={d.tech} onChange={(v) => set("tech", v)} placeholder="Canvas for all materials and submissions. A phone or laptop microphone is enough for the audio assignments." /></Field>
-            <Field label="Access details" hint="answer the questions students always ask: will I be given the book, what format, and where do I get it">
+            <Field src="texts" label="Required texts"><A rows={4} value={d.texts} onChange={(v) => set("texts", v)} placeholder="Hastedt, G. P. (2020). American Foreign Policy: Past, Present, and Future (12th ed.). Rowman and Littlefield." /></Field>
+            <Field src="costNote" label="Cost note" hint="tell them the real number, and the free path if there is one"><A rows={2} value={d.costNote} onChange={(v) => set("costNote", v)} placeholder="The textbook runs about $60 used. A copy is on reserve at Paul Meek Library. Tell me before the second week if cost is a barrier." /></Field>
+            <Field src="tech" label="Technology and platforms"><A rows={3} value={d.tech} onChange={(v) => set("tech", v)} placeholder="Canvas for all materials and submissions. A phone or laptop microphone is enough for the audio assignments." /></Field>
+            <Field src="materials" label="Access details" hint="answer the questions students always ask: will I be given the book, what format, and where do I get it">
               {[
                 ["provided", "These materials will be provided to you at no additional cost."],
                 ["hardcopy", "Available in hardcopy (print)."],
                 ["online", "Available online (digital / e-text)."],
               ].map(([key, text]) => (
-                <SwitchRow key={key} checked={d.materials[key]} onChange={(on) => set("materials", { ...d.materials, [key]: on })}>{text}</SwitchRow>
+                <SwitchRow key={key} src="materials" checked={d.materials[key]} onChange={(on) => set("materials", { ...d.materials, [key]: on })}>{text}</SwitchRow>
               ))}
               <A rows={2} value={d.materials.acquire} onChange={(v) => set("materials", { ...d.materials, acquire: v })} placeholder="Where to acquire them: the UTM Bookstore, a copy on reserve at Paul Meek Library, or the publisher link in Canvas." />
             </Field>
@@ -3139,12 +3069,12 @@ export default function SyllabusBuilder() {
                 </span>
               </div>
             )}
-            <Field label="Grading scale"><A rows={2} value={d.scale} onChange={(v) => set("scale", v)} /></Field>
+            <Field src="scale" label="Grading scale"><A rows={2} value={d.scale} onChange={(v) => set("scale", v)} /></Field>
           </>)}
 
           {tab === 7 && (<>
             <H>Course policies</H>
-            <Field label="Attendance">
+            <Field src="attendance" label="Attendance">
               <SampleRows label="Sample attendance policy" current={d.attendance}
                 options={[
                   ["Graded",
@@ -3169,7 +3099,7 @@ export default function SyllabusBuilder() {
                 placeholder="Say what counts as present, what happens after an absence, and who to tell."
               />
             </Field> 
-            <Field label="What engagement looks like here" hint="optional, but it removes a lot of guesswork">
+            <Field src="participation" label="What engagement looks like here" hint="optional, but it removes a lot of guesswork">
               <SampleRows label="Sample engagement policy" current={d.participation}
                 options={[
                   [
@@ -3201,7 +3131,7 @@ export default function SyllabusBuilder() {
                 placeholder="Merely showing up and sitting through the class is not participation. Asking questions during Q and A, contributing to project discussions, and showing up to team meetings all count."
               />
             </Field>
-            <Field label="Late work and make-up" hint="choose a sample, then edit as needed">
+            <Field src="late" label="Late work and make-up" hint="choose a sample, then edit as needed">
               <SampleRows label="Sample late work policy" current={d.late}
                 options={LATE_POLICIES.map((policy) => ({ value: policy.label, label: policy.label, text: policy.text }))}
                 onChange={async (v) => {
@@ -3233,7 +3163,7 @@ export default function SyllabusBuilder() {
               Required. UTM's AI policy (effective July 1, 2025) says every syllabus must state your expectations for student AI use,
               so pick one of its three tiers below or write your own.
             </Caption>
-            <div className="choice-list" role="radiogroup" aria-label="AI policy tier">
+            <div className="choice-list" role="radiogroup" aria-label="AI policy tier" data-src="ai">
               {Object.entries(AI_POLICIES).map(([k]) => {
                 const [title, desc] = AI_TIER_TEXT[k];
                 return (
@@ -3253,7 +3183,7 @@ export default function SyllabusBuilder() {
               </div>
               <SlideHighlight />
             </div>
-            <div className="mt-4"><Field label="A note from your professor" hint="optional warm box, sits under the policy">
+            <div className="mt-4"><Field src="profNote" label="A note from your professor" hint="optional warm box, sits under the policy">
               <A rows={3} value={d.profNote} onChange={(v) => set("profNote", v)} placeholder="If you are ever unsure whether what you are submitting crosses that line, reach out before you submit. That conversation is always easier before the fact than after." /></Field></div>
             <div className="section-title">Additional policies</div>
             {d.customPolicies.map((policy, i) => (
@@ -3276,7 +3206,7 @@ export default function SyllabusBuilder() {
               const showsLess = full && !policyClosing.includes(k); // what the button says
               return (
                 <div key={k} className={`group-box${d.inc[k] ? "" : " is-off"}`}>
-                  <SwitchRow checked={d.inc[k]} onChange={(on) => set("inc", { ...d.inc, [k]: on })}>
+                  <SwitchRow src={`inc.${k}`} checked={d.inc[k]} onChange={(on) => set("inc", { ...d.inc, [k]: on })}>
                     <span className="policy-title">{v.title}<Lock size={12} aria-label="CTL-maintained language" /></span>
                   </SwitchRow>
                   <div ref={(el) => { policyTextRefs.current[k] = el; }} className={`policy-text${full ? " is-full" : ""}`}>{v.text}</div>
@@ -3295,7 +3225,7 @@ export default function SyllabusBuilder() {
 
           {tab === 9 && (<>
             <H>Schedule</H>
-            <Field label="Schedule format">
+            <Field src="scheduleType" label="Schedule format">
               <Dropdown value={d.scheduleType || "weekly"} ariaLabel="Schedule format"
                 options={[
                   { value: "weekly", label: "Weekly" },
@@ -3316,8 +3246,8 @@ export default function SyllabusBuilder() {
                 })) }));
               }} />
             </Field>
-            <Field label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
-              <DayChips days={d.meetDays} onToggle={toggleDay} />
+            <Field src="meetDays" label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
+              <DayPicker days={d.meetDays} onToggle={toggleDay} />
             </Field>
             {auto ? (
               <Caption>
@@ -3328,7 +3258,7 @@ export default function SyllabusBuilder() {
                 <Caption>
                   Pick the first day of classes and each week's Monday-to-Friday dates fill in. You can still edit any week afterward.
                 </Caption>
-                <Field label="Semester start" hint="used for automatic week dates">
+                <Field src="semesterStart" label="Semester start" hint="used for automatic week dates">
                   <DateField label="Semester start" value={d.semesterStart} onChange={(v) => set("semesterStart", v)} />
                 </Field>
                 <AddRow onClick={autofillScheduleDates} icon={CalendarDays}>Autofill dates</AddRow>
@@ -3337,16 +3267,17 @@ export default function SyllabusBuilder() {
                 )}
               </>
             )}
-            {d.term === "Fall 2026" ? (
-              <div className="group-box">
-                <SwitchRow checked={d.calNote} onChange={(on) => set("calNote", on)}>Add the Fall 2026 registrar dates</SwitchRow>
-                <div className="group-note">Add and drop deadlines, Fall Break, Thanksgiving, finals, and commencement.</div>
-              </div>
-            ) : (
-              <Caption>
-                The add/drop and deadline table is only built in for Fall 2026, so it isn't added for this semester.
-              </Caption>
-            )}
+            <div className="group-box">
+              <SwitchRow src="calNote" checked={d.calNote} onChange={(on) => set("calNote", on)}>Add the {d.term} registrar dates</SwitchRow>
+              {regWarning ? (
+                <div className="group-note is-warn" role="status"><AlertTriangle size={13} aria-hidden="true" />{regWarning}</div>
+              ) : (
+                <div className="group-note" role="status">
+                  {registrar.status === "loading" ? "Checking the registrar's calendar on utm.edu…"
+                    : `${regDates.length} dates from utm.edu/academics/academic-calendar, like add and drop deadlines, breaks, finals, and commencement.`}
+                </div>
+              )}
+            </div>
             {schedRows.map((w, i) => (
               auto ? (
                 <CardField key={i} data-box-key="weeks" data-box-index={i}
@@ -3425,22 +3356,22 @@ export default function SyllabusBuilder() {
                 Answering them here saves you the emails.
               </Caption>
               <div className="flex gap-3 flex-wrap">
-                <div style={{ flex: "1 1 130px" }}><Field label="Lab section / CRN"><T value={d.lab.crn} onChange={(v) => setLab("crn", v)} placeholder="12346" maxLength={5} /></Field></div>
-                <div style={{ flex: "2 1 220px" }}><Field label="Lab instructor" hint="if different from you"><T value={d.lab.instructor} onChange={(v) => setLab("instructor", v)} /></Field></div>
+                <div style={{ flex: "1 1 130px" }}><Field src="lab.crn" label="Lab section / CRN"><T value={d.lab.crn} onChange={(v) => setLab("crn", v)} placeholder="12346" maxLength={5} /></Field></div>
+                <div style={{ flex: "2 1 220px" }}><Field src="lab.instructor" label="Lab instructor" hint="if different from you"><T value={d.lab.instructor} onChange={(v) => setLab("instructor", v)} /></Field></div>
               </div>
-              <Field label="Lab meets on" hint="Select the days this lab meets">
-                <DayChips days={d.lab.meetDays || []} onToggle={toggleLabDay} />
+              <Field src="lab.meetDays" label="Lab meets on" hint="Select the days this lab meets">
+                <DayPicker days={d.lab.meetDays || []} onToggle={toggleLabDay} />
               </Field>
-              <Field label="Lab meeting time">
+              <Field src="lab.meeting" label="Lab meeting time">
                 <T value={d.lab.meeting} onChange={(v) => setLab("meeting", v)} placeholder="2:00 to 4:50 p.m." />
               </Field>
-              <Field label="Lab location"><T value={d.lab.location} onChange={(v) => setLab("location", v)} placeholder="Science Complex 118" /></Field>
-              <Field label="What happens in lab" hint="how it connects to lecture"><A rows={3} value={d.lab.description} onChange={(v) => setLab("description", v)} /></Field>
-              <Field label="How the lab counts toward the course grade" hint="separate grade, percent of the total, or must pass both"><A rows={3} value={d.lab.gradeNote} onChange={(v) => setLab("gradeNote", v)} placeholder="Lab is 25 percent of your final grade. Lab reports are graded within one week." /></Field>
-              <Field label="Lab attendance"><A rows={3} value={d.lab.attendance} onChange={(v) => setLab("attendance", v)} /></Field>
-              <Field label="Lab safety" hint="required"><A rows={4} value={d.lab.safety} onChange={(v) => setLab("safety", v)} placeholder="Your safety rules, any training students must complete before the first lab, and what happens if the rules are not followed." /></Field>
-              <Field label="Supplies and protective equipment"><A rows={3} value={d.lab.supplies} onChange={(v) => setLab("supplies", v)} placeholder="Lab notebook, closed-toe shoes, goggles (available at the bookstore)." /></Field>
-              <Field label="Missed labs and make-up"><A rows={3} value={d.lab.makeup} onChange={(v) => setLab("makeup", v)} /></Field>
+              <Field src="lab.location" label="Lab location"><T value={d.lab.location} onChange={(v) => setLab("location", v)} placeholder="Science Complex 118" /></Field>
+              <Field src="lab.description" label="What happens in lab" hint="how it connects to lecture"><A rows={3} value={d.lab.description} onChange={(v) => setLab("description", v)} /></Field>
+              <Field src="lab.gradeNote" label="How the lab counts toward the course grade" hint="separate grade, percent of the total, or must pass both"><A rows={3} value={d.lab.gradeNote} onChange={(v) => setLab("gradeNote", v)} placeholder="Lab is 25 percent of your final grade. Lab reports are graded within one week." /></Field>
+              <Field src="lab.attendance" label="Lab attendance"><A rows={3} value={d.lab.attendance} onChange={(v) => setLab("attendance", v)} /></Field>
+              <Field src="lab.safety" label="Lab safety" hint="required"><A rows={4} value={d.lab.safety} onChange={(v) => setLab("safety", v)} placeholder="Your safety rules, any training students must complete before the first lab, and what happens if the rules are not followed." /></Field>
+              <Field src="lab.supplies" label="Supplies and protective equipment"><A rows={3} value={d.lab.supplies} onChange={(v) => setLab("supplies", v)} placeholder="Lab notebook, closed-toe shoes, goggles (available at the bookstore)." /></Field>
+              <Field src="lab.makeup" label="Missed labs and make-up"><A rows={3} value={d.lab.makeup} onChange={(v) => setLab("makeup", v)} /></Field>
             </div>)}
           </>)}
 

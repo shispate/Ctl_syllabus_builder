@@ -1,8 +1,11 @@
+import { fetchCalendar } from "./_calendar.js";
 import { SUBJECT_CODES } from "../src/subjectCodes.js";
 import { bannerHeaders, resolveTermCode, findSectionRow, fetchCourseDescription, searchTerm, decodeEntities, listTermsRaw } from "./_banner.js";
 
 function formatInstructorName(displayName) {
   if (!displayName) return "";
+  // "Last, First (Preferred)"; some have an empty "()", which would otherwise keep the raw name
+  displayName = displayName.replace(/\s*\(\s*\)/g, "").trim();
   const match = displayName.match(/^([^,]+),\s*([^(]+?)(?:\s*\(([^)]+)\))?$/);
   if (!match) return decodeEntities(displayName);
   const last = match[1].trim();
@@ -144,7 +147,12 @@ function parseFacultyMeetingTimes(json) {
   const meetingTimes = fmt.map((f) => f.meetingTime).filter(Boolean);
   const meeting = meetingTimes.map(formatMeetingEntry).filter(Boolean).join("; ");
   const location = [...new Set(meetingTimes.map(locationFromMeeting).filter(Boolean))].join("; ");
-  return { meeting, location, modality: deriveModality(fmt) };
+  // days on their own (0 = Sunday, 1 = Monday ... like Date.getDay()) so the form can set its day buttons
+  const timed = meetingTimes.filter((mt) => mt.beginTime && mt.endTime);
+  const days = [...new Set(timed.flatMap((mt) => DAY_KEYS.flatMap((k, i) => (mt[k] ? [(i + 1) % 7] : []))))];
+  // the time alone, only when every meeting shares it (otherwise "meeting" has the full detail)
+  const ranges = [...new Set(timed.map((mt) => formatMeetingRange(mt.beginTime, mt.endTime)))];
+  return { meeting, days, time: ranges.length === 1 ? ranges[0] : "", location, modality: deriveModality(fmt) };
 }
 
 function parseSectionCatalogDetails(html) {
@@ -255,6 +263,8 @@ async function handleDetails(req, res) {
 
     if (meetingInfo) {
       if (meetingInfo.meeting) data.meeting = meetingInfo.meeting;
+      data.days = meetingInfo.days;
+      data.time = meetingInfo.time;
       if (meetingInfo.location) data.location = meetingInfo.location;
       if (meetingInfo.modality) data.modality = meetingInfo.modality;
     }
@@ -396,6 +406,18 @@ async function handleTerms(req, res) {
   }
 }
 
+/* ---------- action=calendar: the registrar's dates for each term, from utm.edu ---------- */
+
+async function handleCalendar(req, res) {
+  try {
+    const terms = await fetchCalendar();
+    res.setHeader("Cache-Control", "public, s-maxage=21600, stale-while-revalidate=86400");
+    return res.status(200).json({ terms });
+  } catch (error) {
+    return res.status(502).json({ error: error.message || "Calendar fetch failed" });
+  }
+}
+
 /* ---------- dispatch ---------- */
 
 export default async function handler(req, res) {
@@ -404,5 +426,6 @@ export default async function handler(req, res) {
   if (action === "section-search") return handleSectionSearch(req, res);
   if (action === "details") return handleDetails(req, res);
   if (action === "terms") return handleTerms(req, res);
+  if (action === "calendar") return handleCalendar(req, res);
   return res.status(400).json({ error: "Unknown or missing action" });
 }

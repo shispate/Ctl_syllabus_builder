@@ -619,7 +619,26 @@ label.inset-row { cursor: text; }
 .inset-value .inset-input { width: 70px; }
 .inset-unit { color: var(--muted); font-size: 15px; }
 .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.field-input > .chips { padding-right: 8px; } /* same gap on the right as above and below the chips */
+/* meeting days: one track, picked days fill orange, neighbors join into one pill */
+.day-picker { position: relative; display: flex; width: fit-content; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.field-input > .day-picker { margin-left: auto; margin-right: 7px; } /* same gap as above and below */
+.day-picker button {
+  width: 38px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+  color: var(--slate); font: inherit; font-size: 13px; font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease, border-radius 0.15s ease;
+}
+.day-picker button { position: relative; } /* above the hover pill */
+.day-picker button:hover { color: var(--ink); }
+/* the hover pill: one day wide, slides to the day under the pointer */
+.day-slide {
+  position: absolute; top: 2px; left: 2px; width: 38px; height: 26px; border-radius: 999px; pointer-events: none;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.15s ease;
+}
+.day-picker button[aria-pressed="true"] { background: var(--orange); color: var(--on-orange); }
+.day-picker .join-prev { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.day-picker .join-next { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.day-picker button:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
 .chip {
   display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border: 0; border-radius: 999px; cursor: pointer;
   background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--slate); font-size: 13px; font-weight: 600;
@@ -639,6 +658,8 @@ label.inset-row { cursor: text; }
 .group-box > .toggle-row:first-child { margin-top: 0; }
 .group-head { padding: 8px 18px 0; font-size: 15px; font-weight: 600; color: var(--ink); }
 .group-note { padding: 4px 18px 2px; margin-top: 2px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.group-note.is-warn { display: flex; gap: 6px; color: var(--warn); }
+.group-note.is-warn svg { flex: none; margin-top: 3px; }
 /* outcome library rows */
 .library-row {
   display: flex; align-items: center; gap: 12px; width: calc(100% - 16px); margin: 2px 8px 0; padding: 8px 10px; border: 0; border-radius: 14px;
@@ -827,10 +848,10 @@ label.inset-row { cursor: text; }
 
 /* preview scroller (pages are styled in PagedPreview.jsx) */
 .preview-pages { display: block; max-height: calc(100vh - 196px); overflow: auto; scrollbar-gutter: stable; padding: 4px 2px 16px 12px; }
-.preview-pages.is-fullscreen { max-height: none; overflow: visible; }
-/* scrollbar on the panel's edge like the form's: reach past the panel's 20px padding;
-   10px + the 10px scrollbar on the right matches the panel's 20px on the left, so the pages sit centered */
-.editor-preview .preview-pages { margin-right: -20px; padding-right: 10px; padding-left: 0; }
+.preview-pages.is-fullscreen { max-height: none; overflow: visible; width: fit-content; min-width: 100%; } /* grows with zoom so the side padding counts on both sides */
+/* scrollbar on the panel's edge like the form's: reach past the panel's 20px padding on both sides,
+   so the view is inset 10px on the left and the 10px scrollbar on the right, and the pages sit centered */
+.editor-preview .preview-pages { margin: 0 -20px 0 -10px; padding-right: 10px; padding-left: 10px; }
 
 /* export tab */
 .group-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 4px 0 6px 14px; }

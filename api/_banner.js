@@ -7,7 +7,9 @@ export function decodeEntities(value) {
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&#39;/gi, "'")
-    .replace(/&quot;/gi, '"');
+    .replace(/&quot;/gi, '"')
+    .replace(/&frac12;/gi, "½").replace(/&frac14;/gi, "¼").replace(/&frac34;/gi, "¾")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
 }
 
 export function bannerHeaders(accept) {
@@ -213,13 +215,15 @@ export async function fetchCourseDescription(termCode, subject, courseNumber) {
   });
   if (!response.ok) { await response.text().catch(() => {}); return null; }
   const html = await response.text();
-  const termCodeParen = /\(\s*[A-Za-z][A-Za-z.,\s]{0,20}\)/;
-  let text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+  const termCodeParen = /\(\s*[A-Za-z][A-Za-z.,\s]{0,40}\)/; // "(F, Sp)" or "(Fall , Spring , Summer)"
+  let text = decodeEntities(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim()
     // drop the credit hours at the start, e.g. "(3) ...", we show those separately
     .replace(/^\(\s*\d+(?:\s*-\s*\d+)?\s*\)\s*/, "");
   // drop which terms it's offered, e.g. "(F, Sp)", at the start or end
   text = text.replace(new RegExp(`^${termCodeParen.source}\\s*`), "");
   text = text.replace(new RegExp(`\\s*${termCodeParen.source}\\s*$`), "");
+  // drop the prerequisites (and any enrollment rules after them), they have their own field
+  text = text.replace(/\s*\b(?:Pre-?\s*Req(?:uisites?)?|Prerequisites?)\s*:[\s\S]*$/i, "").trim();
   if (!text || /no course description is available/i.test(text)) return null;
   return text;
 }
