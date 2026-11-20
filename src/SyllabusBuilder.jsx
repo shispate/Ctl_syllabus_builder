@@ -1381,7 +1381,10 @@ export default function SyllabusBuilder() {
   const toggleFullscreen = (on) => {
     const flip = () => setPreviewFullscreen((f) => (on ?? !f));
     if (!document.startViewTransition || reduceMotion()) { flip(); return; }
-    document.startViewTransition(() => flushSync(flip));
+    // the no-crossfade rules for the pages only apply while this class is on
+    const root = document.documentElement;
+    root.classList.add("is-resizing-preview");
+    document.startViewTransition(() => flushSync(flip)).finished.finally(() => root.classList.remove("is-resizing-preview"));
   };
   useDismiss(previewFullscreen, () => toggleFullscreen(false));
 

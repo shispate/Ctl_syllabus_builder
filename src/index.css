@@ -402,11 +402,11 @@ body { background: var(--wash); }
 /* the panel is a plain box, so stretch it to fit instead of cropping */
 ::view-transition-old(preview-panel),
 ::view-transition-new(preview-panel) { height: 100%; }
-/* the pages: one image kept at its real size and centered, so only the window around it grows
+/* full screen only (theme fades still crossfade the pages): one image kept at its real size and centered, so only the window around it grows
    (stretching it to the panel's width shrinks the page, and a crossfade shows two documents) */
-::view-transition-old(preview-doc) { display: none; }
-::view-transition-new(preview-doc) { animation: none; inline-size: auto; left: 50%; translate: -50% 0; }
-::view-transition-image-pair(preview-doc) { overflow: hidden; }
+:root.is-resizing-preview::view-transition-old(preview-doc) { display: none; }
+:root.is-resizing-preview::view-transition-new(preview-doc) { animation: none; inline-size: auto; left: 50%; translate: -50% 0; }
+:root.is-resizing-preview::view-transition-image-pair(preview-doc) { overflow: hidden; }
 
 .wave-bg { animation: wave-in 0.8s ease both; }
 @keyframes wave-in { from { opacity: 0; } to { opacity: 1; } }
