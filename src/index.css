@@ -34,52 +34,58 @@ html, body, #root {
     max-height: 100%;
     overflow-y: auto;
   }
+  /* saves room for the scrollbar so nothing shifts when it shows up */
+  .editor-form { scrollbar-gutter: stable; padding-right: 10px; }
 }
 /* Default theme */
 :root {
-  --wash: #E8ECF2;
+  /* apple's light grays */
+  --wash: #F2F2F7;
   --paper: #FFFFFF;
-  --tint: #F0F5FA;
-  --line: #D8DEE7;
-  --ink: #1A1A1A;
-  --slate: #4A5568;
-  --muted: #606977;
-  --navy: #0B2240;
+  --tint: #EFEFF4;
+  --line: rgba(60, 60, 67, 0.16);
+  --ink: #1D1D1F;
+  --slate: #48484A;
+  --muted: #636366; /* darker so it passes contrast in filled boxes */
+  --navy: #1D1D1F;
   --orange: #FF8300;
-  --orange-text: #B34700; /* orange used as text or icons; bright orange is too faint on light panels */
-  --field-line: #97A1B0;  /* input borders, stronger than --line so boxes read as boxes */
-  --good: #1E7A46;
-  --goodBg: #EAF6EF;
-  --warn: #B45309;
-  --warnBg: #FEF6E7;
-  --scroll-thumb: #C2CAD6;
-  --scroll-thumb-hover: #A0AABA;
+  --orange-text: #B34700; /* darker orange for text, bright orange is too faint */
+  --field-line: rgba(60, 60, 67, 0.29);
+  --good: #1F7A36;
+  --goodBg: #E8F5EC;
+  --warn: #C4001A; /* red so it doesn't look like the orange accent */
+  --warnBg: #FFEBEA;
+  --ring: #CC6400; /* focus ring, darker so it's visible on light backgrounds */
+  --scroll-thumb: rgba(0, 0, 0, 0.2);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.35);
 }
 
 [data-theme="light"] { /* uses :root values */ }
 
 /* Dark theme */
 [data-theme="dark"] {
-  --wash: #0F1724;
-  --paper: #1A2333;
-  --tint: #243049;
-  --line: #334155;
-  --ink: #E5E7EB;
-  --slate: #CBD5E1;
-  --muted: #94A3B8;
-  --navy: #93C5FD;
+  /* apple's dark grays */
+  --wash: #0A0A0B;
+  --paper: #1C1C1E;
+  --tint: #2C2C2E;
+  --line: rgba(84, 84, 88, 0.5);
+  --ink: #F5F5F7;
+  --slate: #C7C7CC;
+  --muted: #A1A1A6;
+  --navy: #F5F5F7;
   --orange: #FF8300;
-  --orange-text: #FF8300;
-  --field-line: #64748B;
-  --good: #4ADE80;
-  --goodBg: #12301F;
-  --warn: #FBBF24;
-  --warnBg: #3A2A10;
-  --scroll-thumb: #475569;
-  --scroll-thumb-hover: #64748B;
+  --orange-text: #FF9F0A;
+  --field-line: rgba(235, 235, 245, 0.3);
+  --good: #30D158;
+  --goodBg: #0F2A17;
+  --warn: #FF6B6B; /* softer red for dark */
+  --warnBg: rgba(255, 107, 107, 0.14);
+  --ring: color-mix(in srgb, #FF8300 85%, transparent);
+  --scroll-thumb: rgba(255, 255, 255, 0.22);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.36);
 }
 
-/* Blue theme — PALETTE.warm from issue#98 */
+/* Blue Light theme */
 [data-theme="blue"] {
   --wash: #EEDDBE;
   --paper: #FBF4E6;
@@ -94,13 +100,14 @@ html, body, #root {
   --field-line: #A8977A;
   --good: #1E7A46;
   --goodBg: #EDF2DF;
-  --warn: #B45309;
-  --warnBg: #FAEFD6;
+  --warn: #B0001A;
+  --warnBg: #FBE2D4;
+  --ring: #C25400;
   --scroll-thumb: #D3C3A3;
   --scroll-thumb-hover: #BFAA80;
 }
 
-/* Blue+ theme — PALETTES.amber from issue#98 */
+/* Blue Light+ theme */
 [data-theme="blue+"] {
   --wash: #E6CC9C;
   --paper: #F7E8CC;
@@ -113,29 +120,27 @@ html, body, #root {
   --orange: #FF8300;
   --orange-text: #933A00;
   --field-line: #A08A64;
-  --good: #1E7A46;
+  --good: #1A6B3D;
   --goodBg: #E9EDCD;
-  --warn: #9A4A08;
-  --warnBg: #F6E3BE;
+  --warn: #A30018;
+  --warnBg: #F8D7BC;
+  --ring: #B34700;
   --scroll-thumb: #D3BC8F;
   --scroll-thumb-hover: #BFA36F;
 }
 
-/* ---------------------------------------------------------------------------
-   Floating panel layout, used by every theme. Each theme only changes the
-   colors through the variables; Glass also makes the panels see-through.
-   --------------------------------------------------------------------------- */
+/* panel layout for every theme, themes only change the colors */
 :root {
   --panel-bg: var(--paper);
   --panel-blur: none;
   --panel-shadow: 0 1px 3px rgba(11, 34, 64, 0.06), 0 6px 20px rgba(11, 34, 64, 0.05);
-  --field-bg: var(--paper); /* text boxes and dropdown buttons */
-  --masthead-bg: #0B2240;
-  /* the top bar is dark in every theme, so its text colors don't change */
-  --bar-ink: #FAF6EE;
-  --bar-muted: #B9AB92;
-  --on-orange: #1A1206; /* text on orange buttons */
-  --ease-panel: cubic-bezier(0.65, 0, 0.35, 1); /* hiding/showing the panels */
+  --field-bg: rgba(118, 118, 128, 0.12); /* filled boxes */
+  --seg-thumb: #FFFFFF;
+  /* top bar text colors */
+  --bar-ink: var(--ink);
+  --bar-muted: var(--muted);
+  --on-orange: #1A1206;
+  --ease-panel: cubic-bezier(0.65, 0, 0.35, 1); /* panel hide/show */
 }
 
 body { background: var(--wash); }
@@ -163,120 +168,126 @@ body { background: var(--wash); }
   -webkit-backdrop-filter: var(--panel-blur);
   backdrop-filter: var(--panel-blur);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 18px;
   box-shadow: var(--panel-shadow);
 }
 
 .app-masthead {
   flex: none;
   width: 100%;
-  background: var(--masthead-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  /* no wrapping or the bar jumps taller when it grows back from the logo */
+  flex-wrap: nowrap;
   gap: 12px 20px;
   padding: 10px 20px 10px 0;
   min-height: 60px;
   transition: width 0.4s var(--ease-panel), padding-right 0.4s var(--ease-panel), gap 0.4s var(--ease-panel);
 }
 
+@media (max-width: 900px) { .app-masthead { flex-wrap: wrap; } }
 .masthead-left { display: flex; align-items: center; gap: 7px; transition: gap 0.35s var(--ease-panel); }
 .masthead-mark { width: 184px; flex-shrink: 0; display: flex; justify-content: center; }
 .masthead-title, .masthead-right {
   max-width: 420px;
   overflow: hidden;
   white-space: nowrap;
-  /* opacity waits until they've mostly slid out, or they look like they pop out of the logo */
+  /* fade waits so they don't look like they pop out of the logo */
   transition: transform 0.35s var(--ease-panel), opacity 0.3s ease 0.25s, max-width 0.35s var(--ease-panel), padding 0.35s var(--ease-panel), border-left-width 0.35s ease;
 }
-.masthead-title { border-left: 1px solid rgba(233, 221, 200, 0.22); padding-left: 14px; line-height: 1.2; }
-.masthead-title .name { font-family: Fraunces, Georgia, serif; font-size: 17px; font-weight: 600; color: var(--bar-ink); }
-.masthead-title .tag { font-size: 10.5px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--bar-muted); }
-/* padding only matters when it wraps under the title; visible so the button's focus ring and hover lift aren't cut off */
-.masthead-right { display: flex; align-items: center; gap: 12px; padding-left: 20px; overflow: visible; }
+.masthead-title { border-left: 1px solid var(--line); padding-left: 16px; line-height: 1.25; }
+.masthead-title .name { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--bar-ink); }
+.masthead-title .tag { font-size: 13px; color: var(--bar-muted); }
+/* overflow visible so focus rings don't get cut off */
+.masthead-right { display: flex; align-items: center; gap: 12px; padding-left: 20px; overflow: visible; max-width: 720px; }
 
-.progress-pill {
-  display: flex; align-items: center; gap: 9px;
-  border: 1px solid rgba(233, 221, 200, 0.16); border-radius: 999px; padding: 7px 14px;
-}
-.progress-pill .count { font-size: 12.5px; font-weight: 600; color: var(--bar-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.progress-pill .track { width: 90px; height: 4px; border-radius: 2px; background: rgba(233, 221, 200, 0.14); overflow: hidden; }
-.progress-pill .track i { display: block; height: 100%; background: var(--orange); transition: width 0.3s cubic-bezier(0.22, 0.9, 0.34, 1); }
 
 .cta {
   font-family: inherit; font-weight: 700; font-size: 13px;
   padding: 8px 18px; border-radius: 999px; cursor: pointer;
-  background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange);
+  background: var(--orange); color: var(--on-orange); border: 1px solid var(--ring);
   transition: filter 0.15s ease, transform 0.15s ease;
 }
 .cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .cta:focus-visible { outline: 2px solid var(--bar-ink); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .cta:hover { transform: none; } }
 
-/* Glass: on/off for any theme (data-glass on <html>). Each theme sets its own see-through amount. */
+/* glass (data-glass on <html>), each theme sets how see-through it is */
 :root {
-  --glass-panel: rgba(255, 255, 255, 0.3);
-  --glass-masthead: rgba(11, 34, 64, 0.86);
-  /* small blur so the wave shows through; saturate keeps blurred colors from going gray */
-  --glass-blur: blur(8px) saturate(1.4);
+  --glass-panel: rgba(255, 255, 255, 0.2);
+  /* saturate keeps the blur from looking gray */
+  --glass-blur: blur(14px) saturate(1.6);
+  /* glass edge highlight */
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.25), inset 0 0 24px rgba(255, 255, 255, 0.18);
 }
-/* these have to come after the defaults above or they get overridden */
+/* keep these after the defaults or they get overridden */
 [data-theme="dark"] {
-  --field-bg: #243049; /* boxes a step lighter than the panel, or they blend in */
-  --glass-panel: rgba(26, 35, 51, 0.3);
-  --glass-masthead: rgba(0, 0, 0, 0.35);
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 0 24px rgba(255, 255, 255, 0.04);
+  --field-bg: rgba(118, 118, 128, 0.24);
+  --seg-thumb: #636366;
+  --glass-panel: rgba(28, 28, 30, 0.2);
 }
-[data-theme="blue"] { --glass-panel: rgba(251, 244, 230, 0.3); }
-[data-theme="blue+"] { --glass-panel: rgba(247, 232, 204, 0.32); }
+[data-theme="blue"] { --glass-panel: rgba(251, 244, 230, 0.62); /* more solid or the text gets hard to read */ --field-bg: rgba(120, 96, 60, 0.11); --seg-thumb: #FFFBF3; }
+[data-theme="blue+"] { --glass-panel: rgba(247, 232, 204, 0.62); --field-bg: rgba(120, 88, 40, 0.13); --seg-thumb: #FFF6E6; }
 
-/* solid top bar (Glass off) = what the see-through Glass bar looks like over each theme */
-[data-theme="light"] { --masthead-bg: #283D58; }
-[data-theme="blue"] { --masthead-bg: #2A3B4F; }
-[data-theme="blue+"] { --masthead-bg: #29394B; }
-[data-theme="dark"] { --masthead-bg: #0A0F17; }
 
-/* light themes with Glass get a soft gradient, or there's nothing to see through the panels */
-[data-glass][data-theme="light"] body { background: linear-gradient(175deg, #E8EDF4 0%, #DAE2EE 50%, #E4EAF2 100%) fixed; }
-[data-glass][data-theme="blue"] body { background: linear-gradient(175deg, #F2E3C6 0%, #E8D3AE 50%, #F0DEBD 100%) fixed; }
-[data-glass][data-theme="blue+"] body { background: linear-gradient(175deg, #EBD2A4 0%, #E0C38C 50%, #E9CD9C 100%) fixed; }
 
 [data-glass] {
   --panel-bg: var(--glass-panel);
   --panel-blur: var(--glass-blur);
-  /* no shadow on glass: the panels sit 12px apart, so shadows pool into a dark box behind them */
-  --panel-shadow: none;
-  --masthead-bg: var(--glass-masthead);
+  --panel-shadow: 0 1px 3px rgba(11, 34, 64, 0.06), 0 6px 20px rgba(11, 34, 64, 0.05);
 }
 
-/* Thin, rounded scrollbars that match the theme */
+/* liquid glass, only on the sidebar and top bar (apple keeps glass on navigation, not content) */
+:root {
+  --lg-tint: rgba(255, 255, 255, 0.18);
+  --lg-edge: inset 0 -1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.08); /* light glass needs a faint dark edge to show its shape */
+  --lg-rim-soft: rgba(255, 255, 255, 0.4);
+  --lg-filter: blur(8px) saturate(1.7);
+}
+[data-theme="dark"] {
+  --lg-tint: rgba(44, 44, 48, 0.32);
+  --lg-rim-soft: rgba(255, 255, 255, 0.14);
+  --lg-edge: 0 0 0 0 transparent;
+  --lg-filter: blur(12px) saturate(1.9) brightness(1.06);
+}
+[data-theme="blue"] { --lg-tint: rgba(251, 244, 230, 0.38); }
+[data-theme="blue+"] { --lg-tint: rgba(247, 232, 204, 0.38); }
+[data-glass] :is(.editor-rail, .app-masthead) {
+  position: relative; border-color: var(--lg-rim-soft); background: var(--lg-tint);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+  box-shadow: var(--lg-edge), 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* thin scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track,
 ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background-color: var(--scroll-thumb);
   background-clip: content-box;
-  border: 3px solid transparent; /* makes the thumb look thinner than its hit area */
+  border: 3px solid transparent; /* looks thinner than it is */
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-thumb-hover); }
 ::-webkit-scrollbar-button { display: none; }
 
-/* keep the bar off the rounded corners so it doesn't get cut off */
+/* keeps the scrollbar off the rounded corners */
 .app-panel::-webkit-scrollbar-track { margin: 14px 0; }
 .doc-preview::-webkit-scrollbar-track { margin: 6px 0; }
 
-/* the preview page is always white, so its scrollbar stays dark enough to see */
+/* preview scrollbar */
 .doc-preview::-webkit-scrollbar-thumb { background-color: #C2CAD6; }
 .doc-preview::-webkit-scrollbar-thumb:hover { background-color: #A0AABA; }
 
-/* Firefox doesn't support the rules above, so give it the standard version */
+/* firefox version */
 @supports not selector(::-webkit-scrollbar) {
   * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
   .doc-preview { scrollbar-color: #C2CAD6 transparent; }
 }
 
-/* Glass's wave background (WaveBackground.jsx). Sits behind the panels. */
+/* wave background (WaveBackground.jsx) */
 .wave-bg {
   position: fixed;
   inset: 0;
@@ -288,12 +299,12 @@ body { background: var(--wash); }
 }
 .wave-bg canvas { display: block; width: 100%; height: 100%; }
 
-/* Glass: clicking the logo hides the panels. The delays make the panels and top bar take turns. */
+/* clicking the logo hides the panels; the delays make them take turns */
 .masthead-mark-toggle { background: none; border: 0; padding: 0; cursor: pointer; align-self: stretch; align-items: center; }
-.masthead-mark-toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; border-radius: 10px; }
+.masthead-mark-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; border-radius: 10px; }
 
 .editor-rail, .editor-form, .editor-preview {
-  /* -40px leaves room for the shadow; inset(0) cut it into square corners */
+  /* -40px leaves room for the shadow */
   clip-path: inset(-40px);
   transition: clip-path 0.45s var(--ease-panel) 0.35s, visibility 0s linear 0s;
 }
@@ -302,7 +313,7 @@ body { background: var(--wash); }
 .panels-hidden .masthead-left { gap: 0; transition-delay: 0.35s; }
 .panels-hidden .masthead-title { transform: translateX(-110px); opacity: 0; max-width: 0; padding-left: 0; border-left-width: 0; pointer-events: none; transition-delay: 0.35s; }
 .panels-hidden .masthead-right { transform: translateX(-40px); opacity: 0; max-width: 0; padding-left: 0; pointer-events: none; overflow: hidden; transition-delay: 0.35s; }
-/* visibility flips after the wipe, so hidden panels can't be tabbed into */
+/* hidden after the wipe so you can't tab into them */
 .panels-hidden .editor-rail, .panels-hidden .editor-form, .panels-hidden .editor-preview {
   clip-path: inset(-40px -40px 100% -40px);
   visibility: hidden;
@@ -310,19 +321,18 @@ body { background: var(--wash); }
   transition: clip-path 0.45s var(--ease-panel) 0s, visibility 0s linear 0.45s;
 }
 
-/* Theme picker at the bottom of the sidebar */
+/* theme picker */
 .editor-rail { display: flex; flex-direction: column; }
-/* Just "THEME · NAVY + GLASS" until you hover, tab to, or tap it, then the circles
-   slide up. It's flipped so Tab reaches the name first but the name shows at the bottom. */
+/* shows just the theme name until hovered; reversed so Tab hits the name first */
 .theme-picker { margin: auto 6px 6px; padding-top: 10px; display: flex; flex-direction: column-reverse; }
 .theme-summary {
   display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-width: 0;
-  padding: 7px 8px; border: 0; border-radius: 9px; background: transparent; color: inherit;
+  padding: 8px; border: 0; border-radius: 999px; background: transparent; color: inherit;
   font-family: inherit; cursor: pointer; transition: background 0.2s ease;
 }
 .theme-picker:hover .theme-summary, .theme-picker.is-open .theme-summary, .theme-summary:focus-visible { background: var(--tint); }
-.theme-summary:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
-.theme-picker-label { flex-shrink: 0; font-size: 10px; line-height: 1.35; letter-spacing: 1px; color: var(--muted); }
+.theme-summary:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.theme-picker-label { flex-shrink: 0; font-size: 13px; line-height: 1.35; color: var(--muted); }
 .theme-chevron { flex-shrink: 0; color: var(--muted); transition: transform 0.25s ease; }
 
 .theme-options {
@@ -339,15 +349,15 @@ body { background: var(--wash); }
 .theme-picker:hover .theme-chevron,
 .theme-picker:focus-within .theme-chevron,
 .theme-picker.is-open .theme-chevron { transform: rotate(180deg); }
-/* padding leaves room for the selected circle's ring, which sits outside the circle */
+/* room for the selected ring */
 .theme-swatches { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 4px 8px; }
 .theme-swatch {
   position: relative; flex-shrink: 0; width: 20px; height: 20px; padding: 0; border: 0;
   border-radius: 50%; overflow: hidden; cursor: pointer;
-  outline: 2px solid transparent; outline-offset: 2px; /* see-through gap before the ring */
+  outline: 2px solid transparent; outline-offset: 2px;
   transition: transform 0.15s ease, outline-color 0.15s ease;
 }
-/* the edge is drawn on top of the colors, so nothing bleeds past it */
+/* edge on top so colors don't bleed */
 .theme-swatch::before {
   content: ""; position: absolute; inset: 0; z-index: 1; border-radius: 50%; pointer-events: none;
   box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.45);
@@ -357,8 +367,8 @@ body { background: var(--wash); }
 .theme-swatch:focus-visible { outline-color: var(--slate); }
 .theme-swatch[aria-checked="true"]:focus-visible { outline-color: var(--orange); outline-style: double; outline-width: 4px; outline-offset: 1px; }
 
-/* the theme name fades in when it changes; FitText shrinks it if it's too long */
-.theme-name { flex: 0 1 auto; min-width: 0; font-size: 10px; line-height: 1.35; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; }
+/* theme name fades in when it changes */
+.theme-name { flex: 0 1 auto; min-width: 0; font-size: 13px; line-height: 1.35; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; }
 .theme-name.is-preview { color: var(--orange-text); }
 .theme-name span { display: inline-block; animation: theme-name-in 0.25s ease; }
 @keyframes theme-name-in {
@@ -366,7 +376,7 @@ body { background: var(--wash); }
   to { opacity: 1; transform: none; filter: none; }
 }
 
-/* the Glass circle: the current theme's colors, blurred, with a light sheen */
+/* the glass circle */
 .theme-swatch-divider { width: 1px; align-self: stretch; margin: 2px 1px; background: var(--line); }
 .glass-swatch span { position: absolute; inset: -4px; filter: blur(3px); }
 .glass-swatch::after {
@@ -378,7 +388,7 @@ body { background: var(--wash); }
 
 @media (prefers-reduced-motion: reduce) { .theme-swatch:hover { transform: none; } }
 
-/* how long the fade between themes takes (changeLook in SyllabusBuilder.jsx) */
+/* theme fade speed */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 0.4s;
@@ -387,19 +397,471 @@ body { background: var(--wash); }
 
 .wave-bg { animation: wave-in 0.8s ease both; }
 @keyframes wave-in { from { opacity: 0; } to { opacity: 1; } }
-/* shown when Glass gets turned off for being too slow */
+/* the "glass turned off" notification */
 .slow-notice {
-  position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: 360px;
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-  background: var(--paper); color: var(--ink); font-size: 13px;
+  position: fixed; right: 18px; bottom: 18px; z-index: 50; width: min(360px, calc(100vw - 36px));
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 20px;
+  background: var(--paper); color: var(--ink); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
   animation: notice-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes notice-in { from { transform: translateX(calc(100% + 24px)); opacity: 0; } }
-.slow-notice button { flex-shrink: 0; background: none; border: 0; padding: 4px; cursor: pointer; color: var(--orange-text); font: inherit; font-weight: 700; }
-.slow-notice button:last-child { color: var(--muted); display: flex; }
+.notice-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange-text); }
+.notice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.notice-text b { font-size: 13px; font-weight: 600; }
+.notice-text span { font-size: 12px; color: var(--muted); }
+.pill-button {
+  flex: none; padding: 5px 12px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--field-bg); color: var(--ink); font-size: 13px; font-weight: 600; transition: background 0.15s ease;
+}
+.pill-button:hover { background: color-mix(in srgb, var(--ink) 10%, var(--field-bg)); }
+/* close button shows on hover */
+.notice-close {
+  position: absolute; top: -6px; left: -6px; display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 50%;
+  background: var(--paper); color: var(--slate); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); cursor: pointer;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.slow-notice:hover .notice-close, .notice-close:focus-visible { opacity: 1; }
+.pill-button:focus-visible, .notice-close:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
 
-/* reduced motion: turn off every transition and animation, including inline ones in the JSX.
-   The hover lifts on .cta and .theme-swatch are switched off separately above. */
+/* the field look (inputBase in ui.js) */
+.input-base {
+  width: 100%; border: 1px solid transparent; border-radius: 999px; padding: 8px 16px;
+  font-family: inherit; font-size: 15px; color: var(--ink); background: var(--field-bg); outline: none;
+}
+.input-base[data-multiline] { border-radius: 12px; }
+
+/* focus ring */
+.editor-form input:focus,
+.editor-form div:has(> [contenteditable]:focus),
+.editor-form button[aria-haspopup="listbox"]:focus-visible {
+  box-shadow: 0 0 0 1.5px var(--ring);
+}
+
+/* segmented control (percentage / points) */
+.segmented {
+  position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  padding: 3px; border-radius: 999px; background: var(--field-bg);
+}
+.segmented button {
+  position: relative; z-index: 1; border: 0; background: none; cursor: pointer;
+  padding: 8px 20px; border-radius: 999px; font: inherit; font-size: 15px; font-weight: 600; color: var(--slate);
+}
+.segmented button[aria-checked="true"] { color: var(--ink); }
+.segmented button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.segmented-thumb {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 2);
+  border-radius: 999px; background: var(--seg-thumb); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transform: translateX(calc(var(--seg) * 100%)); transition: transform 0.25s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+body { letter-spacing: -0.011em; }
+.masthead-mark { color: var(--ink); }
+.editor-preview.is-hidden { display: none; }
+/* form gets wider when the preview is hidden */
+.editor-form { max-width: 540px; }
+.editor-row:has(.editor-preview.is-hidden) .editor-form { max-width: 820px; margin: 0 auto; }
+
+/* show preview button */
+.bar-button {
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 500;
+}
+.bar-button:hover { background: var(--field-bg); }
+.bar-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* fields: label on the left inside the pill, the input is see-through */
+.field { margin-bottom: 20px; }
+.editor-form .field {
+  display: flex; align-items: center; min-height: 44px; margin-bottom: 10px;
+  padding-left: 18px; border-radius: 999px; background: var(--field-bg);
+}
+.field-label { flex: 0 0 160px; font-size: 15px; color: var(--ink); line-height: 1.3; padding-right: 8px; }
+.field-input { flex: 1; min-width: 0; }
+.field-input :is(input, button[aria-haspopup="listbox"]),
+.field-input div:has(> [contenteditable]) { background: transparent; }
+/* multi-line fields: label on top */
+.editor-form .field:has([data-multiline]) { display: block; border-radius: 18px; padding: 12px 0 8px; }
+/* the writing area is an inset box */
+.editor-form .field [data-multiline] { background: color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 14px; margin: 6px 8px 0; width: auto; }
+.editor-form .field:has([data-multiline]) .field-label { display: block; padding: 0 18px 2px; }
+/* one field per row */
+.editor-form .flex:has(> div > .field) { display: block; }
+/* focus ring goes around the whole field */
+.editor-form .field { transition: box-shadow 0.15s ease; }
+.editor-form .field:focus-within { box-shadow: 0 0 0 1.5px var(--ring); }
+.editor-form .field :is(input, div:has(> [contenteditable]), button[aria-haspopup="listbox"]) { box-shadow: none; }
+@media (max-width: 520px) { .field-label { flex-basis: 110px; } }
+/* progress ring */
+.progress-ring { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--bar-muted, var(--muted)); white-space: nowrap; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring .ring-track { fill: none; stroke: color-mix(in srgb, var(--ink) 15%, transparent); stroke-width: 2.5; }
+.progress-ring .ring-fill { fill: none; stroke: var(--orange); stroke-width: 2.5; stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+
+/* preview icon buttons */
+.icon-group { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--field-bg); }
+.icon-button {
+  display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--slate); cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.icon-button[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 12%, transparent); color: var(--orange-text); }
+.icon-button:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* switch rows */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; margin: 0 8px 4px; padding: 6px 10px;
+  border-radius: 14px; background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-size: 15px; font-weight: 400; line-height: 1.3; color: var(--ink); cursor: pointer; transition: background 0.15s ease;
+}
+.toggle-row:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.field-label + .field-input > .toggle-row:first-child, .field-input > .toggle-row:first-child { margin-top: 6px; }
+.switch {
+  appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 46px; height: 24px; margin: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 18%, transparent); cursor: pointer; transition: background 0.2s ease;
+}
+.switch::after {
+  /* pill shaped knob like iOS 26 */
+  content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 20px; border-radius: 999px;
+  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.25s cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+/* has to beat the see-through field rule */
+.editor-form .field input.switch { background: color-mix(in srgb, var(--ink) 18%, transparent); }
+.editor-form .field input.switch:checked { background: #34C759; }
+.switch:checked { background: #34C759; } /* switches outside a field */
+.switch:checked::after { transform: translateX(15px); }
+.switch:focus-visible { outline: none; }
+.toggle-row:has(.switch:focus-visible) { box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* cards people add */
+.card-field-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 18px; }
+.card-field-title { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; padding: 2px 0; }
+.card-field-title::placeholder { color: var(--muted); font-weight: 600; }
+.card-field-remove { display: flex; padding: 6px; border-radius: 999px; color: var(--muted); cursor: pointer; transition: background 0.15s ease, color 0.15s ease; }
+.card-field-remove:hover { background: color-mix(in srgb, #FF3B30 12%, transparent); color: #FF3B30; }
+
+.card-field-label { flex: 1; font-size: 15px; color: var(--ink); }
+
+/* pop-up alerts (Dialog) */
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0, 0, 0, 0.28); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); animation: dialog-fade 0.2s ease;
+}
+.dialog {
+  padding: 20px 16px 14px; border-radius: 26px; text-align: center; background: var(--paper); color: var(--ink);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); animation: dialog-pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes dialog-fade { from { opacity: 0; } }
+@keyframes dialog-pop { from { opacity: 0; transform: scale(1.08); } }
+.dialog-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.dialog-text { margin: 6px 4px 16px; font-size: 13px; line-height: 1.45; color: var(--slate); }
+.dialog-keys {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; align-items: center; margin: 14px 8px 18px;
+  text-align: left; font-size: 15px; color: var(--slate);
+}
+.dialog-buttons { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.dialog-button {
+  padding: 10px 14px; border: 0; border-radius: 999px; background: var(--field-bg); color: var(--ink);
+  font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s ease;
+}
+.dialog-button:hover { background: color-mix(in srgb, var(--ink) 10%, var(--field-bg)); }
+.dialog-button.is-destructive { background: color-mix(in srgb, #FF3B30 14%, transparent); color: #D70015; }
+[data-theme="dark"] .dialog-button.is-destructive { color: #FF453A; }
+.dialog-button.is-destructive:hover { background: color-mix(in srgb, #FF3B30 22%, transparent); }
+/* main action button */
+.dialog-button.is-default { background: var(--orange); color: var(--on-orange); }
+.dialog-button.is-default:hover { filter: brightness(1.06); background: var(--orange); }
+.dialog-button:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* grading */
+.total-row {
+  display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 18px; margin-bottom: 10px;
+  border-radius: 999px; background: var(--field-bg); font-size: 15px; color: var(--ink);
+}
+.total-row > span:last-child { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.total-row .is-good { color: var(--good); }
+.total-row .is-warn { color: var(--warn); }
+/* label + value rows inside a card */
+.inset-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; margin: 6px 8px 0; padding: 4px 14px;
+  border-radius: 14px; background: color-mix(in srgb, var(--ink) 5%, transparent); font-size: 15px; color: var(--ink);
+}
+label.inset-row { cursor: text; }
+.inset-row:focus-within { box-shadow: 0 0 0 1.5px var(--ring); }
+.inset-value { display: flex; align-items: center; gap: 4px; }
+.editor-form input.inset-input {
+  min-width: 0; width: 140px; border: 0; outline: none; background: transparent; box-shadow: none;
+  text-align: right; font: inherit; font-size: 15px; color: var(--ink);
+}
+.inset-input::placeholder { color: var(--muted); }
+.inset-value .inset-input { width: 70px; }
+.inset-unit { color: var(--muted); font-size: 15px; }
+.chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.chip {
+  display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border: 0; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--slate); font-size: 13px; font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.chip:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+.chip[aria-pressed="true"] { background: var(--orange); color: var(--on-orange); }
+.chip:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+/* warning box */
+.warn-row {
+  display: flex; gap: 10px; padding: 12px 16px; margin-bottom: 10px; border-radius: 18px;
+  background: var(--warnBg); color: var(--warn); font-size: 13px; line-height: 1.45;
+}
+
+/* rounded group of rows */
+.group-box { padding: 6px 0 8px; margin-bottom: 10px; border-radius: 18px; background: var(--field-bg); }
+.group-box > .toggle-row:first-child { margin-top: 0; }
+.group-head { padding: 8px 18px 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.group-note { padding: 4px 18px 2px; margin-top: 2px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+/* outcome library rows */
+.library-row {
+  display: flex; align-items: center; gap: 12px; width: calc(100% - 16px); margin: 2px 8px 0; padding: 8px 10px; border: 0; border-radius: 14px;
+  background: transparent; color: var(--ink); font-size: 14px; line-height: 1.4; text-align: left; cursor: pointer; transition: background 0.15s ease;
+}
+.library-row:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.library-row:disabled { cursor: default; color: var(--slate); }
+.library-row:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+.library-add {
+  display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 999px;
+  background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange-text);
+}
+
+/* university policies */
+.policy-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.policy-title svg { color: var(--muted); flex: none; }
+.policy-text {
+  padding: 4px 18px 0; font-size: 13px; line-height: 1.5; color: var(--slate); white-space: pre-wrap;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; transition: opacity 0.2s ease;
+}
+.policy-text.is-full { display: block; }
+.group-box.is-off .policy-text { opacity: 0.45; }
+.policy-more {
+  margin: 2px 12px 0; padding: 4px 6px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--orange-text); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.policy-more:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
+.policy-more:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* summary rows */
+.summary-group { padding: 6px 0; }
+.summary-row {
+  display: flex; align-items: flex-start; gap: 12px; width: calc(100% - 12px); margin: 0 6px; padding: 9px 12px; border: 0; border-radius: 14px;
+  background: transparent; text-align: left; font-size: 15px; color: var(--ink); cursor: pointer; transition: background 0.15s ease;
+}
+.summary-row:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.summary-row:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+.summary-label { flex: none; width: 150px; }
+.summary-value {
+  flex: 1; min-width: 0; text-align: right; color: var(--slate); white-space: pre-wrap; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+.summary-value.is-missing { color: var(--warn); }
+.summary-value.is-empty { color: var(--muted); }
+.summary-chevron { flex: none; margin-top: 3px; color: var(--muted); }
+.summary-row .item-go { margin-top: 2px; }
+
+/* browser pop-ups follow the theme */
+:root { color-scheme: light; accent-color: var(--orange); }
+[data-theme="dark"] { color-scheme: dark; }
+
+/* DateField.jsx, calendar's right edge lines up with the date */
+.date-field { position: relative; display: flex; justify-content: flex-end; }
+.date-value {
+  padding: 8px 16px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 15px; cursor: pointer;
+}
+.date-value.is-empty { color: var(--muted); }
+.date-value:focus-visible { outline: none; text-decoration: underline; text-decoration-color: var(--ring); text-underline-offset: 4px; }
+.calendar {
+  position: absolute; top: calc(100% + 6px); right: 16px; z-index: 40; width: 272px; padding: 10px 10px 8px;
+  border-radius: 18px; background: var(--paper); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08);
+  animation: dialog-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.1); transform-origin: top right;
+}
+.calendar-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 6px; font-size: 15px; font-weight: 600; color: var(--ink); }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; justify-items: center; }
+.calendar-weekday { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; }
+.calendar-day {
+  width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: var(--ink);
+  font-size: 14px; cursor: pointer; transition: background 0.12s ease;
+}
+.calendar-day:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.calendar-day.is-today { color: var(--orange-text); font-weight: 600; }
+.calendar-day.is-picked { background: var(--orange); color: var(--on-orange); font-weight: 600; }
+.calendar-day:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* schedule weeks */
+.week-dates { margin-left: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.week-off { padding: 2px 18px 0; font-size: 13px; font-weight: 600; color: var(--warn); }
+.card-field [data-multiline] + [data-multiline] { margin-top: 6px; }
+
+/* tab titles */
+.page-title { color: var(--ink); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 18px; }
+/* captions, a little closer when right under the title */
+.editor-form .caption { margin: 4px 16px 14px; }
+.editor-form .page-title + .caption { margin-top: -6px; margin-bottom: 16px; }
+
+/* section headings */
+.section-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); margin: 28px 4px 10px; }
+
+/* pick-one list (AI policy) */
+.choice-list { display: flex; flex-direction: column; gap: 2px; padding: 6px; margin-bottom: 10px; border-radius: 18px; background: var(--field-bg); }
+.choice-row {
+  position: relative; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; border-radius: 14px;
+  font-size: 15px; color: var(--ink); cursor: pointer; transition: background 0.15s ease;
+}
+.choice-row:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.choice-row:has(input:checked) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.choice-row input { position: absolute; opacity: 0; pointer-events: none; }
+.choice-row:has(input:focus-visible) { box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* add buttons */
+.add-row {
+  margin-bottom: 10px; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px;
+  background: var(--field-bg); color: var(--orange-text); font-size: 15px; cursor: pointer; transition: background 0.15s ease;
+}
+.add-row:hover { background: color-mix(in srgb, var(--ink) 6%, var(--field-bg)); }
+.add-row:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+
+/* dropdowns (Dropdown.jsx) */
+.dropdown-control { position: relative; }
+.dropdown-chevron { transition: transform 0.2s ease, color 0.2s ease; }
+.dropdown-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.5, 0, 0.25, 1); } /* slow then fast, like a drip */
+/* options fade in after the drip so the box doesn't show through */
+.dropdown-list { opacity: 0; transition: opacity 0.1s ease; }
+.dropdown.is-open .dropdown-list { opacity: 1; transition: opacity 0.15s ease 0.15s; }
+.dropdown.is-open .dropdown-more { grid-template-rows: 1fr; }
+.dropdown-more > div { overflow: hidden; min-height: 0; }
+.dropdown-list { position: relative; overflow-y: auto; padding: 0 6px 6px; text-align: right; }
+.dropdown-header { padding: 10px 10px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.dropdown-header,
+.dropdown-option {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.dropdown.is-open .dropdown-header,
+.dropdown.is-open .dropdown-option {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.18s ease var(--stair-delay),
+    transform 0.24s cubic-bezier(0.5, 0, 0.25, 1) var(--stair-delay);
+}
+.dropdown-option {
+  display: flex; flex-direction: row-reverse; align-items: center; gap: 8px; padding: 7px 10px 7px 14px; border-radius: 12px;
+  font-size: 15px; color: var(--ink); cursor: pointer; overflow-wrap: anywhere;
+}
+/* sliding highlight */
+.dropdown-slide {
+  position: absolute; top: 0; left: 6px; right: 6px; border-radius: 12px; pointer-events: none; z-index: 0;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  transition: transform 0.2s cubic-bezier(0.3, 0.9, 0.4, 1), height 0.2s ease, opacity 0.15s ease;
+}
+.dropdown-option, .dropdown-header, .dropdown-status { position: relative; z-index: 1; }
+.dropdown-check { width: 18px; flex: none; display: flex; color: var(--orange-text); }
+/* lists outside a field get their own box */
+.dropdown:not(.field .dropdown) .dropdown-list, .editor-form .field:has([data-multiline]) .dropdown-list { margin-top: 4px; padding-top: 6px; border-radius: 16px; background: var(--field-bg); }
+.editor-form .field:not(:has([data-multiline])) .field-input:has(> .dropdown), .editor-form .field:not(:has([data-multiline])) .dropdown { display: contents; }
+/* the melting dropdown; MeltShape draws the shape so the field itself is see-through */
+.editor-form .field:not(:has([data-multiline])):has(.dropdown) { flex-wrap: wrap; position: relative; background: transparent; border-radius: 0; }
+.editor-form .field:not(:has([data-multiline])):has(.dropdown):focus-within { box-shadow: none; }
+.editor-form .field:not(:has([data-multiline])):has(.dropdown) :is(.field-label, .dropdown-control, .dropdown-more) { position: relative; z-index: 1; }
+.editor-form .field:not(:has([data-multiline])) .dropdown-control { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; }
+.editor-form .field:not(:has([data-multiline])) .dropdown-control > input, .editor-form .field:not(:has([data-multiline])) .dropdown-control > button[aria-haspopup] { flex: 1; min-width: 0; }
+/* forces the list onto its own line */
+.editor-form .field:not(:has([data-multiline])):has(.dropdown)::after { content: ""; flex: 0 0 100%; height: 0; order: 1; }
+.editor-form .field:not(:has([data-multiline])) .dropdown-more { order: 2; flex: 0 0 auto; margin-left: auto; min-width: 200px; max-width: 100%; }
+.melt-shape { display: none; }
+.editor-form .field:not(:has([data-multiline])) .melt-shape { display: block; position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+.melt-shape path { fill: var(--field-bg); stroke: transparent; stroke-width: 1.5; transition: stroke 0.15s ease; }
+.editor-form .field:not(:has([data-multiline])):is(:focus-within, :has(.dropdown.is-open)) .melt-shape path { stroke: var(--ring); }
+.editor-form .field:not(:has([data-multiline])) .dropdown-list { padding: 2px 6px 6px; }
+/* sample pickers inside a text box */
+.editor-form .field:has([data-multiline]) .dropdown { margin: 6px 8px 0; }
+.editor-form .field:has([data-multiline]) .dropdown-control button[aria-haspopup] { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.editor-form .field:has([data-multiline]) .dropdown-list { margin: 4px 0 0; }
+/* left aligned here to match the picker */
+.editor-form .field:has([data-multiline]) .dropdown-list { text-align: left; }
+.editor-form .field:has([data-multiline]) .dropdown-option { justify-content: space-between; }
+
+/* autofill lists */
+.dropdown-option.is-stacked { display: block; text-align: right; }
+.dropdown-option.is-stacked small { display: block; font-size: 13px; color: var(--muted); }
+.dropdown-status { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 7px 14px; font-size: 13px; color: var(--muted); }
+
+/* values on the right */
+.editor-form .field:not(:has([data-multiline])) .field-input :is(input, [contenteditable], [aria-hidden="true"]) { text-align: right; text-overflow: ellipsis; }
+.editor-form .field:not(:has([data-multiline])) .field-input button[aria-haspopup="listbox"] > span { flex: 1; text-align: right; }
+
+/* preview scroller (pages are styled in PagedPreview.jsx) */
+.preview-pages { display: block; max-height: calc(100vh - 196px); overflow: auto; scrollbar-gutter: stable; padding: 4px 2px 16px 12px; }
+.preview-pages.is-fullscreen { max-height: none; overflow: visible; }
+
+/* export tab */
+.group-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 4px 0 6px 14px; }
+.row-list { display: flex; flex-direction: column; gap: 4px; }
+.list-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 36px; padding: 7px 16px;
+  border-radius: 999px; background: var(--field-bg); color: var(--ink); font-size: 15px; text-align: left;
+  border: 0; cursor: pointer; transition: background 0.15s ease;
+}
+button.list-row:hover { background: color-mix(in srgb, var(--ink) 8%, var(--field-bg)); }
+.list-row:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+/* rows that open */
+.expand-group { border-radius: 18px; background: var(--field-bg); transition: background 0.15s ease; }
+.expand-group > .list-row { background: transparent; }
+.expand-group:has(> button.list-row:hover) { background: color-mix(in srgb, var(--ink) 6%, var(--field-bg)); }
+.expand-chevron { flex: none; }
+.expand-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s ease; }
+.expand-group.is-open .expand-more { grid-template-rows: 1fr; }
+.expand-more > div { overflow: hidden; display: flex; flex-direction: column; padding: 0 6px; }
+.expand-group.is-open .expand-more > div { padding-bottom: 6px; }
+.list-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px; border-radius: 12px; border: 0;
+  background: transparent; color: var(--slate); font-size: 14px; text-align: left; cursor: pointer; transition: background 0.15s ease;
+}
+.list-item:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.list-item:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+.item-go { display: flex; align-items: center; gap: 2px; font-size: 13px; color: var(--orange-text); opacity: 0; transition: opacity 0.15s ease; }
+.list-item:hover .item-go, .list-item:focus-visible .item-go { opacity: 1; }
+.list-item.is-done { cursor: default; }
+.item-note { display: block; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.open-list { display: flex; flex-direction: column; padding: 0 6px 8px; }
+.detail-text { padding: 6px 10px 2px; font-size: 13px; line-height: 1.45; color: var(--slate); }
+.detail-text b { font-weight: 600; color: var(--ink); }
+.list-item.is-done:hover { background: transparent; color: var(--slate); }
+.row-label { flex: none; min-width: 104px; }
+.row-detail { flex: 1; min-width: 0; text-align: right; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption { font-size: 13px; line-height: 1.45; color: var(--muted); margin: 8px 16px 0; }
+.export-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 28px; }
+.export-button {
+  display: flex; align-items: center; gap: 12px; padding: 8px 18px 8px 8px; border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--field-bg); color: var(--ink); text-align: left; transition: background 0.15s ease, transform 0.15s ease;
+}
+.export-button:hover { background: color-mix(in srgb, var(--ink) 8%, var(--field-bg)); }
+.export-button:active { transform: scale(0.98); }
+.export-button:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--ring); }
+.export-badge {
+  display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--orange-text, var(--orange));
+}
+.export-text { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
+.export-text b { font-size: 15px; font-weight: 600; }
+.export-text small { font-size: 12px; color: var(--muted); }
+.export-arrow { flex: none; color: var(--muted); transition: transform 0.2s ease, color 0.15s ease; }
+.export-button:hover .export-arrow { transform: translateY(2px); color: var(--ink); }
+/* red delete/clear button */
+.destructive-row {
+  display: block; width: 100%; min-height: 40px; margin-top: 20px; padding: 9px 16px; border-radius: 999px; border: 0;
+  background: var(--field-bg); color: #D70015; font-size: 15px; cursor: pointer; transition: background 0.15s ease, transform 0.15s ease;
+}
+[data-theme="dark"] .destructive-row { color: #FF453A; }
+.destructive-row:hover { background: color-mix(in srgb, #FF3B30 10%, var(--field-bg)); }
+.destructive-row:active { transform: scale(0.99); }
+.destructive-row:focus-visible { outline: none; box-shadow: 0 0 0 1.5px color-mix(in srgb, #FF3B30 85%, transparent); }
+@media (max-width: 520px) { .export-actions { grid-template-columns: 1fr; } }
+
+/* reduced motion turns off all animation; !important so it beats inline styles */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;

@@ -59,7 +59,7 @@ void main(){
   gl_FragColor = vec4(uColor, a);
 }`;
 
-const SAND = [233 / 255, 221 / 255, 200 / 255];
+const SAND = [209 / 255, 209 / 255, 214 / 255]; // light gray marks for dark mode
 const NAVY = [11 / 255, 34 / 255, 64 / 255];
 
 // onSoftwareGraphics: called if the computer has no real graphics card, so 3D will be slow

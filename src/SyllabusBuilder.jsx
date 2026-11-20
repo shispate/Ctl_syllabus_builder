@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import {
-  BookOpen, User, MessageSquare, Target, Library, Scale, Gavel,
-  ShieldCheck, CalendarDays, FileDown, Check, AlertTriangle, Plus, Trash2,
-  Save, Upload, Printer, Lock, Info, ChevronRight, ChevronUp, Maximize2, Minimize2, FlaskConical, ChevronDown, X, Loader2,
-  CircleX, ClipboardCheck
+  BookOpen, User, MessageSquare, Target, Library, Scale, Gavel, ShieldCheck, CalendarDays, FileDown,
+  Check, AlertTriangle, Plus, Trash2, Save, Printer, Lock, ChevronRight, ChevronUp, PanelRightClose,
+  PanelRightOpen, Maximize2, Minimize2, FlaskConical, X, Loader2, Download, FileText, Keyboard, ClipboardCheck, Gauge,
 } from "lucide-react";
 import { flushSync } from "react-dom";
 import { UI, inputBase } from "./ui.js";
-import Dropdown from "./Dropdown.jsx";
+import Dropdown, { DropdownList, MorphChevron } from "./Dropdown.jsx";
+import DateField from "./DateField.jsx";
+import PagedPreview, { previewSpot, PAGE_CSS, countPages, pagesHtml } from "./PagedPreview.jsx";
 import { SUBJECTS } from "./subjectCodes.js";
 import WaveBackground from "./WaveBackground.jsx";
 
@@ -454,6 +455,20 @@ function defaultTerm(today = new Date()) {
   return terms[last + 1].label;
 }
 
+// backup term list for when Banner is down
+function nearbyTerms(today = new Date()) {
+  const seasons = ["Spring", "Summer", "Fall"];
+  const [season, year] = defaultTerm(today).split(" ");
+  let i = seasons.indexOf(season) - 1, y = Number(year);
+  if (i < 0) { i = 2; y -= 1; }
+  const out = [];
+  for (let k = 0; k < 5; k++) {
+    out.push(`${seasons[i]} ${y}`);
+    if (++i > 2) { i = 0; y += 1; }
+  }
+  return out.reverse();
+}
+
 // Departments and their subjects, checked against utm.edu.
 // Also the fallback when Banner's department info is wrong.
 const DEPARTMENT_DATA = [
@@ -567,16 +582,14 @@ const sanitizePart = (s) => {
 };
 
 
-/** Renders an uppercase field label and an optional hint. */
-const Lbl = ({ children, hint }) => (
-  <div className="mb-1">
-    <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: UI.slate }}>{children}</span>
-    {hint && <span className="ml-2 text-xs" style={{ color: UI.muted }}>{hint}</span>}
-  </div>
-);
+// turns labels into sentence case but keeps acronyms like CRN
+const sentenceCase = (s) => typeof s !== "string" ? s
+  : s.split(" ").map((w, i) => (i === 0 || w === "I" || /^[A-Z0-9]{2,}/.test(w) ? w : w.toLowerCase())).join(" ");
+
+
 
 // the sidebar's selected and hover highlights; 40 is each tab's height
-const railPill = { position: "absolute", left: 6, right: 6, top: 6, height: 40, borderRadius: 9, pointerEvents: "none" };
+const railPill = { position: "absolute", left: 8, right: 8, top: 8, height: 40, borderRadius: 999, pointerEvents: "none" };
 
 
 /* Rich-text fields are stored as a small HTML subset. Browsers wrap each new
@@ -670,31 +683,35 @@ const TextEditor = ({ value, onChange, placeholder, rows = 1, mono = false, sing
 
   return (
     <div
+      data-multiline={singleLine ? undefined : "true"}
+      className={inputBase}
       style={{
-        ...inputBase,
         position: "relative",
-        minHeight: singleLine ? 34 : rows * 22,
-        height: singleLine ? 34 : undefined,
-        maxHeight: singleLine ? 34 : 220,
-        overflow: singleLine ? "hidden" : "auto",
+        minHeight: singleLine ? 40 : rows * 23,
+        height: singleLine ? 40 : undefined,
+        overflow: "hidden",
         padding: 0,
-        display: "flex",
+        // placeholder and text share one grid cell so the box fits whichever is taller
+        display: singleLine ? "flex" : "grid",
         alignItems: "stretch",
       }}
     >
       {isEmpty && placeholder && (
         <div
           aria-hidden="true"
-          style={{
+          style={singleLine ? {
             position: "absolute",
-            top: 7,
-            left: 10,
-            right: 10,
+            top: 8,
+            left: 16,
+            right: 16,
             color: UI.muted,
             pointerEvents: "none",
             lineHeight: 1.5,
             whiteSpace: singleLine ? "nowrap" : "pre-wrap",
-            fontFamily: mono ? "ui-monospace, monospace" : inputBase.fontFamily,
+            fontFamily: mono ? "ui-monospace, monospace" : "inherit",
+          } : {
+            gridArea: "1 / 1", padding: "8px 16px", color: UI.muted, pointerEvents: "none", lineHeight: 1.5,
+            whiteSpace: "pre-wrap", fontFamily: mono ? "ui-monospace, monospace" : "inherit",
           }}
         >
           {placeholder}
@@ -716,20 +733,20 @@ const TextEditor = ({ value, onChange, placeholder, rows = 1, mono = false, sing
         onKeyDown={handleKeyDown}
         style={{
           width: "100%",
-          minHeight: singleLine ? 34 : rows * 22,
-          height: singleLine ? 34 : undefined,
-          maxHeight: singleLine ? 34 : 220,
+          gridArea: "1 / 1",
+          minHeight: singleLine ? 40 : rows * 23,
+          height: singleLine ? 40 : undefined,
+          maxHeight: singleLine ? 40 : 480, // grows with the text, scrolls past this
           overflow: singleLine ? "hidden" : "auto",
-          resize: "vertical",
           border: "none",
           borderRadius: 0,
           boxShadow: "none",
           background: "transparent",
           lineHeight: 1.5,
           whiteSpace: singleLine ? "nowrap" : "pre-wrap",
-          fontFamily: mono ? "ui-monospace, monospace" : inputBase.fontFamily,
+          fontFamily: mono ? "ui-monospace, monospace" : "inherit",
           color: UI.ink, // theme variable, so typed text is readable in every theme
-          padding: "7px 10px",
+          padding: "8px 16px",
           outline: "none",
         }}
       />
@@ -741,7 +758,7 @@ const TextEditor = ({ value, onChange, placeholder, rows = 1, mono = false, sing
    input so type="date"/"tel", maxLength, and onBlur keep working. Rich text is
    for the multi-line fields below. */
 const T = ({ value, onChange, placeholder, mono, type = "text", onBlur, maxLength }) => (
-  <input type={type} style={{ ...inputBase, fontFamily: mono ? "ui-monospace, monospace" : inputBase.fontFamily }}
+  <input type={type} className={inputBase} style={mono ? { fontFamily: "ui-monospace, monospace" } : undefined}
     value={value} placeholder={placeholder} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
 );
 
@@ -809,14 +826,78 @@ const A = ({ value, onChange, placeholder, rows = 4, onBlur }) => (
 
 /** Groups a label, hint, and form control into one consistent field. */
 const Field = ({ label, hint, children }) => (
-  <div className="mb-4"><Lbl hint={hint}>{label}</Lbl>{children}</div>
+  <div className="field">
+    <span className="field-label" title={hint || undefined}>{sentenceCase(label)}</span>
+    <div className="field-input">{children}</div>
+  </div>
 );
 
-/** Displays instructional text without adding it to the exported syllabus. */
-const Note = ({ children }) => (
-  <div className="flex gap-2 p-3 mb-4 rounded text-sm" style={{ background: UI.tint, color: UI.slate, lineHeight: 1.55 }}>
-    <Info size={15} style={{ color: UI.navy, flexShrink: 0, marginTop: 2 }} />
-    <div>{children}</div>
+// card for things people add (sections, policies) with a heading and a trash button
+const CardField = ({ title, onTitle, titlePlaceholder, titleLabel, label, onRemove, removeLabel, children, ...rest }) => (
+  <div className="field card-field" {...rest}>
+    <div className="card-field-head">
+      {onTitle
+        ? <input className="card-field-title" value={title} onChange={(e) => onTitle(e.target.value)} placeholder={titlePlaceholder} aria-label={titleLabel} />
+        : <span className="card-field-label">{label}</span>}
+      {onRemove && <button type="button" className="card-field-remove" onClick={onRemove} aria-label={removeLabel} title="Remove"><Trash2 size={15} /></button>}
+    </div>
+    {children}
+  </div>
+);
+
+// a label with an on/off switch
+const SwitchRow = ({ checked, onChange, children }) => (
+  // stops the focus ring from sticking after a click
+  <label className="toggle-row" onMouseDown={(e) => e.preventDefault()}>
+    <span>{children}</span>
+    <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+  </label>
+);
+
+// pop-up alert, closes on outside click or Escape
+const Dialog = ({ onClose, labelId, width = 300, children }) => {
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [onClose]);
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={labelId}
+        style={{ width: `min(100%, ${width}px)` }} onMouseDown={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// gray helper text
+const Caption = ({ children }) => <div className="caption">{children}</div>;
+
+// full-width add button (can take a different icon)
+const AddRow = ({ onClick, icon: I = Plus, children }) => (
+  <button type="button" className="add-row" onClick={onClick}><I size={16} aria-hidden="true" />{children}</button>
+);
+
+// mon-sat day toggles
+const DayChips = ({ days, onToggle }) => (
+  <span className="chips" role="group" aria-label="Meeting days">
+    {CLASS_DAYS.map(([n, name]) => (
+      <button key={n} type="button" className="chip" aria-pressed={days.includes(n)} aria-label={DAY_NAMES[n]}
+        onClick={() => onToggle(n)}>{name}</button>
+    ))}
+  </span>
+);
+
+// a row that opens to show more
+const ExpandRow = ({ open, onToggle, label, summary, children }) => (
+  <div className={`expand-group${open ? " is-open" : ""}`}>
+    <button className="list-row" onClick={onToggle} aria-expanded={open}>
+      <span className="row-label">{label}</span>
+      <span className="row-detail">{summary}</span>
+      <MorphChevron open={open} />
+    </button>
+    <div className="expand-more" inert={open ? undefined : ""}><div>{children}</div></div>
   </div>
 );
 
@@ -850,11 +931,14 @@ export default function SyllabusBuilder() {
   // remembered so the hover highlight slides from where it was last, not from the top
   const lastHoverTab = useRef(0);
   if (hoverTab !== null) lastHoverTab.current = hoverTab;
-  // starts as Light or Dark to match the computer's setting
+  // starts in light or dark based on the computer
+  // starts in light or dark based on the computer
   const systemDark = () => window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   const [theme,setTheme] = useState(() => (systemDark() ? "dark" : "light"));
   const themePicked = useRef(false); // once someone picks a theme, stop following the computer
   const [glass, setGlass] = useState(true);
+  const [panelsHidden, setPanelsHidden] = useState(false);
+  const wavesOnly = panelsHidden && glass;
   const [hoverTheme, setHoverTheme] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef(null);
@@ -864,8 +948,6 @@ export default function SyllabusBuilder() {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [pickerOpen]);
-  const [panelsHidden, setPanelsHidden] = useState(false);
-  const wavesOnly = panelsHidden && glass;
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
@@ -874,7 +956,7 @@ export default function SyllabusBuilder() {
   }, [glass]);
   const currentTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
 
-  // fades between themes; older browsers and reduced motion just switch
+  // fades between themes, just switches if the browser can't
   const changeLook = (apply) => {
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (!document.startViewTransition || reduce) { apply(); return; }
@@ -886,6 +968,10 @@ export default function SyllabusBuilder() {
     setTheme(id);
   });
   const pickTheme = (id) => { themePicked.current = true; applyTheme(id); };
+  const toggleGlass = () => { glassPicked.current = true; hideNotice(); changeLook(() => {
+    document.documentElement.toggleAttribute("data-glass", !glass);
+    setGlass(!glass);
+  }); };
   // follow the computer switching between light and dark mode while the app is open
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -894,17 +980,13 @@ export default function SyllabusBuilder() {
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
-  const toggleGlass = () => { glassPicked.current = true; hideNotice(); changeLook(() => {
-    document.documentElement.toggleAttribute("data-glass", !glass);
-    setGlass(!glass);
-  }); };
 
-  // Performance: if Glass makes the page choppy, turn it off (it's the wave and blur that cost).
-  // Once someone turns Glass on or off themselves, leave it alone for this visit.
+  // performance mode: turns Glass off if the page gets choppy (the waves and blur are what cost)
+  // once someone flips Glass themselves, leave it alone
   const glassPicked = useRef(false);
   const [slowNotice, setSlowNotice] = useState(false);
   const noticeRef = useRef(null);
-  // slides the notice back out to the right before removing it
+  // slides the notice back out before removing it
   const hideNotice = () => {
     const el = noticeRef.current;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -922,10 +1004,8 @@ export default function SyllabusBuilder() {
     const t = setTimeout(hideNotice, 10000);
     return () => clearTimeout(t);
   }, [slowNotice]);
-
-  // Under 24 fps (visibly choppy) for 6 seconds straight counts as too slow. Not 30: Chrome's
-  // battery saver caps pages at 30 on purpose. Skips the first 3 seconds (loading) and gaps
-  // over half a second (switching tabs, exporting) so one hiccup doesn't count.
+  // under 24 fps for 6 seconds straight = too slow (not 30, battery saver caps at 30)
+  // skips the first 3 seconds and gaps over half a second so one hiccup doesn't count
   useEffect(() => {
     if (!glass || glassPicked.current) return undefined;
     let raf, last = performance.now(), windowStart = last, frames = 0, slow = 0;
@@ -945,12 +1025,18 @@ export default function SyllabusBuilder() {
     return () => cancelAnimationFrame(raf);
   }, [glass]);
   const [showPrinted, setShowPrinted] = useState(false);
-  // true when the preview is showing the real print colors
-  const printColors = theme !== "dark" || showPrinted;
   const [pendingDelete, setPendingDelete] = useState(null);
+  // our version of confirm(), use: if (!(await askConfirm({...}))) return
+  const [confirmBox, setConfirmBox] = useState(null);
+  const askConfirm = (opts) => new Promise((resolve) => setConfirmBox({ ...opts, resolve }));
+  const answerConfirm = (yes) => { confirmBox?.resolve(yes); setConfirmBox(null); };
   const [weekCount, setWeekCount] = useState("15");
   const [weekCountWarning, setWeekCountWarning] = useState(false);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
+  const [showDone, setShowDone] = useState(false);
+  const [fullPolicies, setFullPolicies] = useState([]); // policies with Show more open
+  const [openChecks, setOpenChecks] = useState([]); // export rows that are open
   const [showTextKeybinds, setShowTextKeybinds] = useState(false);
 
   const [lookupStatus, setLookupStatus] = useState(null);
@@ -1173,6 +1259,7 @@ export default function SyllabusBuilder() {
     };
   }, [sectionSuggestOpen]);
 
+  const sectionCourseRef = useRef(""); // which course the section is for
   const pickSectionSuggestion = (s) => {
     setD((p) => ({ ...p, section: s.section }));
     setSectionSuggestOpen(false);
@@ -1186,11 +1273,17 @@ export default function SyllabusBuilder() {
 
     const subject = parsed[1].toUpperCase();
     const courseNumber = parsed[2].toUpperCase();
+    // new course = clear the old section and show the new list
+    const courseKey = `${subject} ${courseNumber}`;
+    const switched = Boolean(sectionCourseRef.current) && sectionCourseRef.current !== courseKey;
+    sectionCourseRef.current = courseKey;
+    if (switched && String(d.section || "").trim()) setD((p) => ({ ...p, section: "" }));
+    const sectionEmpty = switched || !String(d.section || "").trim();
     const cacheKey = `${d.term}|${subject}|${courseNumber}`;
     const cached = sectionListCacheRef.current.get(cacheKey);
     if (cached) {
       setSectionSuggestions(cached);
-      if (cached.length && !String(d.section || "").trim()) setSectionSuggestOpen(true);
+      if (cached.length && sectionEmpty) setSectionSuggestOpen(true);
       return undefined;
     }
 
@@ -1208,7 +1301,7 @@ export default function SyllabusBuilder() {
         const sections = payload.sections || [];
         sectionListCacheRef.current.set(cacheKey, sections);
         setSectionSuggestions(sections);
-        if (sections.length && !String(d.section || "").trim()) setSectionSuggestOpen(true);
+        if (sections.length && sectionEmpty) setSectionSuggestOpen(true);
       } catch (error) {
         if (error.name === "AbortError") return;
         if (error instanceof TypeError) markLiveDown();
@@ -1301,7 +1394,7 @@ export default function SyllabusBuilder() {
     "WELCOME TO THIS COURSE",                    // 2 Welcome
     "STUDENT LEARNING OUTCOMES",                 // 3 Outcomes
     "REQUIRED MATERIALS",                        // 4 Materials
-    null,                                        // 5 Review/Summary
+    null,                                        // 5 Summary
     "ASSESSMENT AND GRADING",                    // 6 Grading
     "COURSE POLICIES",                           // 7 Policies
     "UNIVERSITY POLICIES AND STUDENT SUPPORT",   // 8 University
@@ -1363,7 +1456,7 @@ export default function SyllabusBuilder() {
   };
 
   const scrollPreviewTo = (sectionName, offsetPixels = 0, behavior = "smooth") => {
-    const paper = previewRef.current;
+    const paper = previewRef.current?.shadowRoot || previewRef.current; // pages are in a shadow root
     if (!sectionName || !paper) return;
     const heading = [...paper.querySelectorAll("h2, h3")]
       .find((h) => h.innerText.trim() === sectionName);
@@ -1371,10 +1464,9 @@ export default function SyllabusBuilder() {
     const scroller = previewScroller();
     if (!scroller) return;
     const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const tRect = heading.getBoundingClientRect();
-    const sRect = scroller.getBoundingClientRect();
-    if (tRect.top >= sRect.top - 24 && tRect.bottom <= sRect.bottom + 24) return; // already visible
-    const rawTop = tRect.top - sRect.top + scroller.scrollTop - 30 + (Number(offsetPixels) || 0);
+    const spot = previewSpot(heading, scroller);
+    if (!spot || spot.visible) return; // already visible
+    const rawTop = spot.top - 30 + (Number(offsetPixels) || 0);
     if (Math.abs(rawTop - scroller.scrollTop) <= 8) return;
     const top = rawTop;
     scroller.scrollTo({ top: Math.min(maxScroll, Math.max(0, top)), behavior: behavior === "auto" ? "auto" : "smooth" });
@@ -1386,7 +1478,7 @@ export default function SyllabusBuilder() {
     const sectionName = SECTION_FOR_BOX[key];
     if (!sectionName) return;
 
-    const paper = previewRef.current;
+    const paper = previewRef.current?.shadowRoot || previewRef.current; // pages are in a shadow root
     if (!paper) return;
     const heading = [...paper.querySelectorAll("h2, h3")]
       .find((h) => h.innerText.trim() === sectionName);
@@ -1456,10 +1548,9 @@ export default function SyllabusBuilder() {
       scrollPreviewTo(sectionName, index * boxStepFor(key), behavior);
       return;
     }
-    const tRect = target.getBoundingClientRect();
-    const sRect = scroller.getBoundingClientRect();
-    if (tRect.top >= sRect.top - 24 && tRect.bottom <= sRect.bottom + 24) return; // visible; avoid top yank
-    const scTop = tRect.top - sRect.top + scroller.scrollTop - 30;
+    const spot = previewSpot(target, scroller);
+    if (!spot || spot.visible) return; // already visible
+    const scTop = spot.top - 30;
     if (Math.abs(scTop - scroller.scrollTop) <= 8) return;
     scroller.scrollTo({ top: Math.max(0, scTop), behavior });
   };
@@ -1511,7 +1602,7 @@ export default function SyllabusBuilder() {
       const focusedBox = box;
       // Keep the preview aligned with the box being edited.
       const previewT = requestAnimationFrame(() => {
-        const paper = previewRef.current;
+        const paper = previewRef.current?.shadowRoot || previewRef.current; // pages are in a shadow root
         if (focusedBox) {
           const key = focusedBox.dataset.boxKey;
           const index = parseInt(focusedBox.dataset.boxIndex, 10);
@@ -1535,20 +1626,16 @@ export default function SyllabusBuilder() {
               : (el.textContent || "").toLowerCase().includes(searchLower));
           if (match) {
             const scroller = previewScroller();
-            if (scroller) {
-              const tRect = match.getBoundingClientRect();
-              const sRect = scroller.getBoundingClientRect();
-              if (!(tRect.top >= sRect.top - 24 && tRect.bottom <= sRect.bottom + 24)) {
-                const top = tRect.top - sRect.top + scroller.scrollTop - 30;
-                scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-              }
-            }
+            const spot = scroller && previewSpot(match, scroller);
+            if (spot && !spot.visible) scroller.scrollTo({ top: Math.max(0, spot.top - 30), behavior: "smooth" });
             return;
           }
         }
         const standardHeading = [...paper.querySelectorAll("h2, h3")]
           .find((h) => h.innerText.trim() === SECTION_FOR_TAB[tab]);
-        if (standardHeading) standardHeading.scrollIntoView({ block: "nearest", behavior: "smooth" });      });
+        const scroller = previewScroller();
+        const spot = standardHeading && scroller && previewSpot(standardHeading, scroller);
+        if (spot && !spot.visible) scroller.scrollTo({ top: Math.max(0, spot.top - 30), behavior: "smooth" });      });
       void previewT;
     };
     form.addEventListener("focusin", handleFocus);
@@ -1999,7 +2086,7 @@ export default function SyllabusBuilder() {
     ["Course description", hasText(d.description), "Welcome"],
     ["Why this course matters, in your voice", hasText(d.welcome), "Welcome"],
     ["At least three learning outcomes", realOutcomes.length >= 3, "Outcomes"],
-    ["Every outcome tied to an assessment", realOutcomes.length > 0 && unmapped.length === 0, "Outcomes"],
+    ["Every outcome is graded by an assessment", realOutcomes.length > 0 && unmapped.length === 0, "Outcomes"],
     ["Required materials listed", hasText(d.texts) || d.materials.provided || d.materials.hardcopy || d.materials.online || hasText(d.materials.acquire), "Materials"],
     [
       d.gradingMethod === "percentage"
@@ -2465,7 +2552,7 @@ export default function SyllabusBuilder() {
        ${DOC_CSS}
     }
     /* dark theme override on the preview only, not the exported document */
-    [data-theme="dark"] .doc-preview.themed{background:var(--paper);color:var(--ink)}
+    [data-theme="dark"] .doc-preview.themed{background:#242426;color:var(--ink)}
     [data-theme="dark"] .doc-preview.themed h2,
     [data-theme="dark"] .doc-preview.themed h3,
     [data-theme="dark"] .doc-preview.themed .tt{color:var(--navy)}
@@ -2502,8 +2589,8 @@ export default function SyllabusBuilder() {
 
   /** Downloads the current syllabus as an editable Word-compatible HTML document. */
   const exportWord = () => dl(new Blob(["\ufeff" + fullHtml()], { type: "application/msword" }), fname("doc"));
-  const clearForm = () => {
-    if (!window.confirm("Clear the entire syllabus and start over? This cannot be undone. Export your syllabus first if you want to keep a copy.")) return;
+  const clearForm = async () => {
+    if (!(await askConfirm({ title: "Clear the whole syllabus?", text: "Everything you've entered will be erased. You can't undo this, so export first if you want a copy.", action: "Clear", destructive: true }))) return;
     setD(createBlank());
     setTab(0);
     const scroller = previewScroller();
@@ -2522,11 +2609,21 @@ export default function SyllabusBuilder() {
     })));
 
   /** Opens the browser print dialog with the current syllabus formatted for PDF output. */
+  // prints the same pages as the preview so the PDF matches
   const exportPdf = async () => {
     const f = frameRef.current; if (!f) return;
     const doc = f.contentWindow.document;
-    doc.open(); doc.write(fullHtml()); doc.close();
+    doc.open();
+    // keep the doctype or tables size differently than the preview
+    doc.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>${esc(pdfFilename())}</title>
+      <style>@page{size:8.5in 11in;margin:0}body{margin:0}${PREVIEW_CSS}${PAGE_CSS}
+      .preview-page{break-after:page;page-break-after:always}.preview-page:last-child{break-after:auto;page-break-after:auto}</style>
+      </head><body><div class="doc-preview" style="position:absolute;left:-10000px;top:0"><div class="page-flow" id="measure">${docBody}</div></div></body></html>`);
+    doc.close();
     doc.title = pdfFilename();
+    // wait for the logo before counting pages
+    await imagesReady(doc);
+    doc.body.innerHTML = pagesHtml(docBody, countPages(doc.getElementById("measure")), "doc-preview");
     // Wait for the logo, any other images, and fonts to finish loading instead
     // of guessing a delay. The 5-second cap keeps one stuck resource from
     // blocking the export forever.
@@ -2540,11 +2637,13 @@ export default function SyllabusBuilder() {
   };
 
  // Warn about missing topics only for weekly schedules.
-  const confirmThenExport = (exportFn) => {
+  const confirmThenExport = async (exportFn) => {
     if (isWeeklySchedule && missingWeeks.length > 0) {
-      const ok = window.confirm(
-        `Your schedule is missing topics for week${missingWeeks.length > 1 ? "s" : ""} ${formatWeekRanges(missingWeeks)}. Export anyway?`
-      );
+      const ok = await askConfirm({
+        title: "Export anyway?",
+        text: `Your schedule has no topics for week${missingWeeks.length > 1 ? "s" : ""} ${formatWeekRanges(missingWeeks)}.`,
+        action: "Export",
+      });
       if (!ok) return;
     }
     exportFn();
@@ -2553,67 +2652,67 @@ export default function SyllabusBuilder() {
   /* ---------- sections ---------- */
   const TABS = [
     { n: "Course", i: BookOpen }, { n: "Instructor", i: User }, { n: "Welcome", i: MessageSquare },
-    { n: "Outcomes", i: Target }, { n: "Materials", i: Library }, {n: "Review/Summary", i: ClipboardCheck},
+    { n: "Outcomes", i: Target }, { n: "Materials", i: Library }, { n: "Summary", i: ClipboardCheck },
     { n: "Grading", i: Scale }, { n: "Policies", i: Gavel }, { n: "University", i: ShieldCheck },
     { n: "Schedule", i: CalendarDays }, {n: "Labs", i: FlaskConical}, { n: "Accessibility", i: EarHearingAid },
     { n: "Export", i: FileDown },
   ];
+  const RAIL_ROW = 40;
+  const railY = (i) => i * RAIL_ROW;
   // Look tabs up by name so adding a tab doesn't break hardcoded index numbers.
   const tabIndex = (name) => TABS.findIndex((t) => t.n === name);
 
-  /** Renders a consistently styled action button with an optional icon. */
-  const Btn = ({ onClick, children, icon: I, primary }) => (
-    <button onClick={onClick} className="flex items-center gap-2 px-3 py-2 rounded text-sm font-semibold"
-      style={{ background: primary ? UI.orange : UI.paper, color: primary ? "var(--on-orange)" : UI.navy,
-        border: `1px solid ${primary ? UI.orange : UI.fieldLine}`, cursor: "pointer" }}>
-      {I && <I size={15} />}{children}
-    </button>
-  );
 
   /* ---------- editor layout: navigation, form controls, and matching live preview ---------- */
   return (
-    <div className={wavesOnly ? "app-shell panels-hidden" : "app-shell"} style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", minHeight: "100vh" }}>
+    <div className={wavesOnly ? "app-shell panels-hidden" : "app-shell"} style={{ fontFamily: "-apple-system, BlinkMacSystemFont, Inter, ui-sans-serif, system-ui, sans-serif", minHeight: "100vh" }}>
       {glass && <WaveBackground light={theme !== "dark"} onSoftwareGraphics={glassTooSlow} />}
       {slowNotice && (
         <div ref={noticeRef} className="slow-notice app-panel" role="status">
-          <span>Turned off Glass because things were running slow.</span>
-          <button type="button" onClick={toggleGlass}>Undo</button>
-          <button type="button" aria-label="Dismiss" onClick={hideNotice}><X size={14} /></button>
+          <span className="notice-icon" aria-hidden="true"><Gauge size={18} /></span>
+          <span className="notice-text"><b>Glass turned off</b><span>Things were running slow.</span></span>
+          <button type="button" className="pill-button" onClick={toggleGlass}>Undo</button>
+          <button type="button" className="notice-close" aria-label="Dismiss" onClick={hideNotice}><X size={11} strokeWidth={3} /></button>
         </div>
       )}
       <iframe ref={frameRef} title="print" style={{ position: "fixed", width: 0, height: 0, border: 0, left: -9999 }} />
-      {pendingDelete && (
-        <div role="presentation" onMouseDown={() => setPendingDelete(null)} style={{ position: "fixed", inset: 0, zIndex: 10,
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(11,34,64,.38)" }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" onMouseDown={(e) => e.stopPropagation()}
-            style={{ width: "min(100%, 420px)", background: UI.paper, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 24, boxShadow: "0 12px 36px rgba(11,34,64,.24)" }}>
-            <div id="delete-dialog-title" style={{ color: UI.navy, fontSize: 18, fontWeight: "bold", marginBottom: 8 }}>Delete this entry?</div>
-            <div style={{ color: UI.slate, fontSize: 14, lineHeight: 1.5, marginBottom: 20 }}>
-              This {({ outcomes: "learning outcome", items: "assignment or category", weeks: "schedule entry" }[pendingDelete.k] || "entry")} contains information. Are you sure you want to delete it?
-            </div>
-            <div className="flex justify-end gap-2">
-              <Btn onClick={() => setPendingDelete(null)}>Cancel</Btn>
-              <Btn onClick={confirmDrop} primary>Delete</Btn>
-            </div>
+      {confirmBox && (
+        <Dialog onClose={() => answerConfirm(false)} labelId="confirm-dialog-title">
+          <div id="confirm-dialog-title" className="dialog-title">{confirmBox.title}</div>
+          {confirmBox.text && <div className="dialog-text">{confirmBox.text}</div>}
+          <div className="dialog-buttons">
+            <button type="button" className="dialog-button" autoFocus onClick={() => answerConfirm(false)}>Cancel</button>
+            <button type="button" className={`dialog-button${confirmBox.destructive ? " is-destructive" : " is-default"}`}
+              onClick={() => answerConfirm(true)}>{confirmBox.action || "OK"}</button>
           </div>
-        </div>
+        </Dialog>
+      )}
+      {pendingDelete && (
+        <Dialog onClose={() => setPendingDelete(null)} labelId="delete-dialog-title">
+          <div id="delete-dialog-title" className="dialog-title">Delete this entry?</div>
+          <div className="dialog-text">
+            This {({ outcomes: "learning outcome", items: "assignment or category", weeks: "schedule entry" }[pendingDelete.k] || "entry")} has
+            information in it. You can't undo this.
+          </div>
+          <div className="dialog-buttons">
+            {/* Cancel is focused so Enter doesn't delete */}
+            <button type="button" className="dialog-button" autoFocus onClick={() => setPendingDelete(null)}>Cancel</button>
+            <button type="button" className="dialog-button is-destructive" onClick={confirmDrop}>Delete</button>
+          </div>
+        </Dialog>
       )}
       {showTextKeybinds && (
-        <div role="presentation" onMouseDown={() => setShowTextKeybinds(false)} style={{ position: "fixed", inset: 0, zIndex: 1100,
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(11,34,64,.38)" }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="text-keybinds-title" onMouseDown={(event) => event.stopPropagation()}
-            style={{ width: "min(100%, 340px)", background: UI.paper, border: `1px solid ${UI.line}`, borderRadius: 14, padding: 20, boxShadow: "0 12px 36px rgba(11,34,64,.24)" }}>
-            <div id="text-keybinds-title" style={{ color: UI.navy, fontSize: 18, fontWeight: "bold", marginBottom: 14 }}>Text keybinds</div>
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "10px 16px", alignItems: "center", color: UI.slate, fontSize: 14 }}>
-              <kbd>Ctrl+B</kbd><span>Bold</span>
-              <kbd>Ctrl+U</kbd><span>Underline</span>
-              <kbd>Ctrl+I</kbd><span>Italicize</span>
-            </div>
-            <div className="flex justify-end" style={{ marginTop: 20 }}>
-              <Btn onClick={() => setShowTextKeybinds(false)}>Close</Btn>
-            </div>
+        <Dialog onClose={() => setShowTextKeybinds(false)} labelId="text-keybinds-title">
+          <div id="text-keybinds-title" className="dialog-title">Text keybinds</div>
+          <div className="dialog-keys">
+            <kbd>Ctrl+B</kbd><span>Bold</span>
+            <kbd>Ctrl+U</kbd><span>Underline</span>
+            <kbd>Ctrl+I</kbd><span>Italicize</span>
           </div>
-        </div>
+          <div className="dialog-buttons">
+            <button type="button" className="dialog-button" autoFocus onClick={() => setShowTextKeybinds(false)}>Done</button>
+          </div>
+        </Dialog>
       )}
 
       {/* masthead */}
@@ -2621,13 +2720,13 @@ export default function SyllabusBuilder() {
         <div className="masthead-left">
           {/* keep this the same width as the sidebar so the logo stays centered over it */}
           {glass ? (
-            <button type="button" className="masthead-mark masthead-mark-toggle" onClick={() => setPanelsHidden((h) => !h)}
+            <button type="button" className="masthead-mark masthead-mark-toggle" onClick={() => setPanelsHidden((hidden) => !hidden)}
               aria-pressed={wavesOnly} title={wavesOnly ? "Show the panels" : "Hide the panels"}
               aria-label={wavesOnly ? "Show the panels" : "Hide the panels"}>
-              <UtmMark style={{ width: 112 }} />
+              <UtmMark style={{ width: 112 }} textColor="currentColor" />
             </button>
           ) : (
-            <div className="masthead-mark"><UtmMark style={{ width: 112 }} /></div>
+            <div className="masthead-mark"><UtmMark style={{ width: 112 }} textColor="currentColor" /></div>
           )}
           <div className="masthead-title">
             <div className="name">Syllabus Builder</div>
@@ -2635,9 +2734,19 @@ export default function SyllabusBuilder() {
           </div>
         </div>
         <div className="masthead-right">
-          <div className="progress-pill" title="Readiness checks passed">
-            <span className="count">{passed} of {checks.length} ready</span>
-            <div className="track"><i style={{ width: `${(passed / checks.length) * 100}%` }} /></div>
+          {/* only shows when the preview is hidden */}
+          {!previewOpen && (
+            <button type="button" className="bar-button" onClick={() => setPreviewOpen(true)} title="Show the preview">
+              <PanelRightOpen size={16} /><span>Show preview</span>
+            </button>
+          )}
+          <div className="progress-ring" title="Readiness checks passed">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+              <circle cx="9" cy="9" r="7" className="ring-track" />
+              <circle cx="9" cy="9" r="7" className="ring-fill" pathLength="100"
+                style={{ strokeDasharray: `${(passed / checks.length) * 100} 100` }} />
+            </svg>
+            <span>{passed} of {checks.length} ready</span>
           </div>
           <button className="cta" onClick={() => setTab(tabIndex("Export"))}>Export syllabus</button>
         </div>
@@ -2645,17 +2754,17 @@ export default function SyllabusBuilder() {
 
       <div className="flex flex-wrap editor-row">
         {/* left rail */}
-        <div className="editor-rail app-panel" style={{ width: 184, position: "relative", overflow: "hidden", paddingTop: 6 }}>
+        <div className="editor-rail app-panel" style={{ width: 184, position: "relative", overflow: "hidden", paddingTop: 8 }}>
           <div style={{
             ...railPill,
-            background: "rgba(255,131,0,0.12)",
-            transform: `translateY(${tab * 40}px)`,
+            background: "color-mix(in srgb, var(--ink) 10%, transparent)",
+            transform: `translateY(${railY(tab)}px)`,
             transition: "transform 0.25s ease",
           }} />
           <div aria-hidden="true" style={{
             ...railPill,
-            background: "color-mix(in srgb, var(--ink) 7%, transparent)",
-            transform: `translateY(${lastHoverTab.current * 40}px)`,
+            background: "color-mix(in srgb, var(--ink) 5%, transparent)",
+            transform: `translateY(${railY(lastHoverTab.current)}px)`,
             opacity: hoverTab !== null && hoverTab !== tab ? 1 : 0,
             transition: "transform 0.2s ease, opacity 0.2s ease",
           }} />
@@ -2664,16 +2773,12 @@ export default function SyllabusBuilder() {
             return (
               <button key={t.n} onClick={() => setTab(i)}
                 onMouseEnter={() => setHoverTab(i)} onMouseLeave={() => setHoverTab(null)}
-                className="relative flex items-center gap-2 w-full px-3 text-sm text-left"
-                style={{ height: 40, background: "transparent", color: on ? UI.navy : UI.slate,
-                  fontWeight: on ? "bold" : "normal", cursor: "pointer" }}>
-                <span style={{ width: 21, height: 21, borderRadius: "50%", flexShrink: 0,
-                  display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 700,
-                  background: on ? C.orange : done ? UI.goodBg : UI.tint, color: on ? "var(--on-orange)" : done ? UI.good : UI.slate }}>
-                  <t.i size={12} strokeWidth={2.25} />
-                </span>
+                className="relative flex items-center gap-3 w-full text-left"
+                style={{ height: RAIL_ROW, paddingLeft: 24, paddingRight: 18, background: "transparent", color: on ? UI.ink : UI.slate, fontSize: 15,
+                  fontWeight: on ? 600 : 400, cursor: "pointer" }}>
+                <t.i size={17} strokeWidth={1.75} style={{ flexShrink: 0, color: on ? UI.orangeText : UI.muted }} />
                 <span style={{ flex: 1 }}>{t.n}</span>
-                {done && <Check size={13} style={{ color: UI.good, flexShrink: 0 }} />}
+                {done && <Check size={14} style={{ color: UI.good, flexShrink: 0 }} />}
               </button>
             );
           })}
@@ -2681,7 +2786,7 @@ export default function SyllabusBuilder() {
             onMouseLeave={() => setHoverTheme(null)}>
             <button type="button" className="theme-summary" onClick={() => setPickerOpen((o) => !o)}
               aria-expanded={pickerOpen} aria-controls="theme-options" title="Change the theme">
-              <span className="theme-picker-label" id="theme-picker-label">THEME</span>
+              <span className="theme-picker-label" id="theme-picker-label">Theme</span>
               {(() => {
                 const base = THEMES.find((t) => t.id === hoverTheme) || currentTheme;
                 const withGlass = hoverTheme === "glass" ? !glass : glass;
@@ -2725,62 +2830,54 @@ export default function SyllabusBuilder() {
           </div>
 </div>
         {/* form */}
-        <div ref={formRef} className="p-5 editor-form app-panel" style={{ flex: "1 1 420px", minWidth: 340, maxWidth: 620 }}>
+        <div ref={formRef} className="p-5 editor-form app-panel" style={{ flex: "1 1 400px", minWidth: 340 }}>
           {tab === 0 && (<>
             <H>Course</H>
             <div className="flex gap-3 flex-wrap items-end">
               <div style={{ flex: "1 1 150px" }}>
-                <Field label="Course code" hint="POSC 322">
-                  <div ref={codeSuggestRef} style={{ position: "relative" }}>
+                <Field label="Course code">
+                  <div ref={codeSuggestRef} className={`dropdown${codeSuggestOpen ? " is-open" : ""}`}>
+                    <div className="dropdown-control">
                     <input
-                      style={inputBase}
+                      className={inputBase}
                       value={d.code}
                       placeholder="POSC 322"
                       autoComplete="off"
                       onChange={(e) => set("code", e.target.value)}
                       onFocus={() => { if (codeSuggestions.length) setCodeSuggestOpen(true); }}
                     />
-                    <div role="listbox" className="transition-all duration-200"
-                      style={{
-                        position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", zIndex: 30,
-                        background: UI.paper, border: `1px solid ${UI.line}`, borderRadius: 4,
-                        boxShadow: "0 6px 16px rgba(0,0,0,.12)", overflow: "hidden", maxHeight: 220, overflowY: "auto",
-                        opacity: codeSuggestOpen ? 1 : 0,
-                        transform: codeSuggestOpen ? "translateY(0) scaleY(1)" : "translateY(-4px) scaleY(0.96)",
-                        transformOrigin: "top", pointerEvents: codeSuggestOpen ? "auto" : "none",
-                      }}>
+                    </div>
+                    <DropdownList open={codeSuggestOpen} root={codeSuggestRef} label="Course suggestions">
                       {liveDown && (
-                        <div className="flex items-center gap-2" style={{ padding: "8px 10px", fontSize: 12.5, color: UI.warn, borderBottom: `1px solid ${UI.line}` }}>
+                        <div className="dropdown-status" style={{ color: UI.warn }}>
                           <AlertTriangle size={13} />Live catalog unavailable. Using offline catalog.
                         </div>
                       )}
                       {codeSuggestLoading && codeSuggestions.length === 0 && (
-                        <div className="flex items-center gap-2" style={{ padding: "8px 10px", fontSize: 12.5, color: UI.slate }}>
+                        <div className="dropdown-status">
                           <Loader2 size={13} className="animate-spin" />{liveDown ? "Loading offline catalog" : "Searching live course catalog"}&hellip;
                         </div>
                       )}
                       {liveDown && !codeSuggestLoading && codeSuggestions.length === 0 && (
-                        <div style={{ padding: "8px 10px", fontSize: 12.5, color: UI.slate }}>No matching courses.</div>
+                        <div className="dropdown-status">No matching courses.</div>
                       )}
                       {codeSuggestions.map((s) => (
-                        <div key={s.type + s.code} role="option"
-                          onClick={() => pickCodeSuggestion(s)}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = UI.tint; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                          style={{ padding: "7px 10px", fontSize: 13, cursor: "pointer" }}>
-                          <div style={{ fontWeight: "bold", color: UI.navy }}>{s.code}</div>
-                          <div style={{ fontSize: 11.5, color: UI.slate }}>{s.type === "subject" ? s.description : s.title}</div>
+                        <div key={s.type + s.code} role="option" className="dropdown-option is-stacked"
+                          onMouseDown={(e) => e.preventDefault()} onClick={() => pickCodeSuggestion(s)}>
+                          <div>{s.code}</div>
+                          <small>{s.type === "subject" ? s.description : s.title}</small>
                         </div>
                       ))}
-                    </div>
+                    </DropdownList>
                   </div>
                 </Field>
               </div>
               <div style={{ flex: "1 1 130px" }}>
-                <Field label="Section" hint="e.g. 001">
-                  <div ref={sectionSuggestRef} style={{ position: "relative" }}>
+                <Field label="Section">
+                  <div ref={sectionSuggestRef} className={`dropdown${sectionSuggestOpen ? " is-open" : ""}`}>
+                    <div className="dropdown-control">
                     <input
-                      style={{ ...inputBase, paddingRight: 30 }}
+                      className={inputBase} style={{ paddingRight: lookupStatus ? 34 : 16 }} // room for the lookup icon
                       value={d.section}
                       placeholder="001"
                       autoComplete="off"
@@ -2795,26 +2892,16 @@ export default function SyllabusBuilder() {
                       <Check size={15} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: UI.good }} />}
                     {lookupStatus === "error" &&
                       <X size={15} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: UI.warn }} />}
-                    <div role="listbox" className="transition-all duration-200"
-                      style={{
-                        position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", zIndex: 30,
-                        background: UI.paper, border: `1px solid ${UI.line}`, borderRadius: 4,
-                        boxShadow: "0 6px 16px rgba(0,0,0,.12)", overflow: "hidden", maxHeight: 220, overflowY: "auto",
-                        opacity: sectionSuggestOpen ? 1 : 0,
-                        transform: sectionSuggestOpen ? "translateY(0) scaleY(1)" : "translateY(-4px) scaleY(0.96)",
-                        transformOrigin: "top", pointerEvents: sectionSuggestOpen ? "auto" : "none",
-                      }}>
+                    </div>
+                    <DropdownList open={sectionSuggestOpen} root={sectionSuggestRef} label="Section suggestions">
                       {sectionSuggestions.map((s) => (
-                        <div key={s.crn} role="option"
-                          onClick={() => pickSectionSuggestion(s)}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = UI.tint; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                          style={{ padding: "7px 10px", fontSize: 13, cursor: "pointer" }}>
-                          <div style={{ fontWeight: "bold", color: UI.navy }}>Section {s.section}</div>
-                          <div style={{ fontSize: 11.5, color: UI.slate }}>{s.meeting} &middot; {s.instructor}</div>
+                        <div key={s.crn} role="option" className="dropdown-option is-stacked"
+                          onMouseDown={(e) => e.preventDefault()} onClick={() => pickSectionSuggestion(s)}>
+                          <div>Section {s.section}</div>
+                          <small>{s.meeting} &middot; {s.instructor}</small>
                         </div>
                       ))}
-                    </div>
+                    </DropdownList>
                   </div>
                 </Field>
               </div>
@@ -2828,13 +2915,18 @@ export default function SyllabusBuilder() {
             <div className="flex gap-3 flex-wrap">
               <div style={{ flex: "1 1 130px" }}>
                 <Field label="Term" hint="used for the lookup too">
-                  <Dropdown editable value={d.term} onChange={(v) => set("term", v)} placeholder="Fall 2026"
-                    ariaLabel="Term" maxHeight={220} options={termOptions.map((t) => ({ value: t, label: t }))} />
+                  {/* terms come from Banner so new ones show up on their own */}
+                  <Dropdown value={d.term} onChange={(v) => set("term", v)} placeholder="Select a term"
+                    ariaLabel="Term" maxHeight={220}
+                    options={(() => {
+                      const list = termOptions.length ? termOptions : nearbyTerms();
+                      return (d.term && !list.includes(d.term) ? [d.term, ...list] : list).map((t) => ({ value: t, label: t }));
+                    })()} />
                 </Field>
               </div>
               <div style={{ flex: "1 1 130px" }}><Field label="Credit hours"><T value={d.credits} onChange={(v) => set("credits", v)} /></Field></div>
             </div>
-            <Field label="Semester Length" hint="students read this before they register">
+            <Field label="Semester length" hint="students read this before they register">
               <Dropdown value={d.semester || ""} onChange={(v) => set("semester", v)} ariaLabel="Semester length" placeholder="Select semester length"
                 options={["Full Semester", "Half of a Semester", "Third of a Semester"].map((m) => ({ value: m, label: m }))} />
             </Field>
@@ -2863,7 +2955,7 @@ export default function SyllabusBuilder() {
               />
             </Field>
             <Field label="Room"><T value={d.location} onChange={(v) => set("location", v)} placeholder="Humanities 407" /></Field>
-            <Field label="Other Meeting Room" hint="Only fill this if some classes take place in other room during the week"><T value={d.exlocation} onChange={(v) => set("exlocation", v)} placeholder="Humanities 409 on Fridays" /></Field>
+            <Field label="Other meeting room" hint="Only fill this if some classes take place in other room during the week"><T value={d.exlocation} onChange={(v) => set("exlocation", v)} placeholder="Humanities 409 on Fridays" /></Field>
             <Field label="Department" hint="type freely, or pick from the list">
               <Dropdown editable value={d.dept} onChange={(v) => set("dept", v)} placeholder="Department of Computer Science"
                 ariaLabel="Department" options={DEPARTMENTS.flatMap((g) => [
@@ -2876,7 +2968,10 @@ export default function SyllabusBuilder() {
 
           {tab === 1 && (<>
             <H>Instructor</H>
-            <Note>Office hours are the single most under-used thing on a syllabus. Students who work shifts or commute from Dresden or Union City often cannot make a fixed midday block. Naming an alternative, even just "email me and we will find a time," changes who walks through the door.</Note>
+            <Caption>
+              Office hours are the most under-used thing on a syllabus. Students who work shifts or commute from Dresden or Union City
+              often can't make a midday block, so naming an alternative, even "email me and we'll find a time," changes who shows up.
+            </Caption>
             <Field label="Your name"><T value={d.instructor} onChange={(v) => set("instructor", v)} placeholder="Dr. Jane Doe" /></Field>
             <Field label="Email"><T value={d.email} onChange={(v) => set("email", v)} onBlur={() => {const email = d.email.trim(); set("email", email ? (email.endsWith("@") ? `${email}utm.edu` : email.includes("@") ? email : `${email}@utm.edu`) : "");}} placeholder="jdoe (autofills @utm.edu)" /></Field>
             <Field label="Phone"><T type="tel" value={d.phone} onChange={(v) => set("phone", v)} placeholder="731-555-0123" /></Field>
@@ -2887,65 +2982,66 @@ export default function SyllabusBuilder() {
           </>)}
 
           {tab === 2 && (<>
-            <H>Welcome and Description</H>
-            <Note>The description is what the catalog says. The welcome is what you say. Research on student-centered syllabi is consistent that the second one moves how students read everything after it, so it is worth four sentences of your own voice.</Note>
+            <H>Welcome and description</H>
+            <Caption>
+              The description is what the catalog says. The welcome is what you say, and it shapes how students read
+              everything after it, so it's worth four sentences in your own voice.
+            </Caption>
             <Field label="Why this course matters" hint="your voice, not the catalog">
               <A rows={6} value={d.welcome} onChange={(v) => set("welcome", v)}
                 placeholder="Foreign policy is not something that happens far away in diplomatic corridors. It shapes the price of the goods you buy, the security of the country you live in, and the reputation the United States carries around the world. This course is built around that reality." />
             </Field>
             <Field label="Course description"><A rows={5} value={d.description} onChange={(v) => set("description", v)} placeholder="Paste the description from the UTM catalog." /></Field>
-            <div className="mt-6 mb-2" style={{ color: UI.navy, fontWeight: "bold", fontSize: 14 }}>Custom course descriptions</div>
+            <div className="section-title">Custom course descriptions</div>
             {(d.customDescriptions || []).map((item, i) => (
-              <div key={i} data-box-key="customDescriptions" data-box-index={i} className="mb-3 p-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                <div className="flex items-start gap-2">
-                  <div style={{ flex: 1 }}>
-                    <Field label="Custom title"><T value={item.title} onChange={(v) => setDeep("customDescriptions", i, "title", v)} placeholder="Course focus, context, or special emphasis" /></Field>
-                    <Field label="Description"><A rows={6} value={item.description} onChange={(v) => setDeep("customDescriptions", i, "description", v)} placeholder="Provide a custom course description." /></Field>
-                  </div>
-                  <button type="button" onClick={() => drop("customDescriptions", i)} aria-label={`Remove custom description ${i + 1}`} title="Remove custom description"
-                    className="p-2 rounded" style={{ color: UI.slate, background: "transparent", border: 0, cursor: "pointer" }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
+              <CardField key={i} data-box-key="customDescriptions" data-box-index={i}
+                title={item.title} onTitle={(v) => setDeep("customDescriptions", i, "title", v)}
+                titlePlaceholder="Title, like Course focus" titleLabel={`Custom description ${i + 1} title`}
+                onRemove={() => drop("customDescriptions", i)} removeLabel={`Remove custom description ${i + 1}`}>
+                <A rows={6} value={item.description} onChange={(v) => setDeep("customDescriptions", i, "description", v)} placeholder="Provide a custom course description." />
+              </CardField>
             ))}
-            <Btn onClick={() => push("customDescriptions", { title: "", description: "" })} icon={Plus}>Add custom course description</Btn>
+            <AddRow onClick={() => push("customDescriptions", { title: "", description: "" })}>Add custom description</AddRow>
           </>)}
 
           {tab === 3 && (<>
-            <H>Learning Outcomes</H>
-            <label className="flex items-start gap-2 mb-4 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-              <input type="checkbox" checked={d.showPrimer} onChange={(e) => set("showPrimer", e.target.checked)} style={{ marginTop: 3 }} />
-              <span>Include the explainer box in the exported document. It tells a new faculty member what an SLO is, how to test one, and why the Gen Ed outcomes belong here. Uncheck it, or delete the box in Word, once your outcomes are written.</span>
-            </label>
+            <H>Learning outcomes</H>
+            <div className="group-box">
+              <SwitchRow checked={d.showPrimer} onChange={(on) => set("showPrimer", on)}>Include the explainer box</SwitchRow>
+              <div className="group-note">
+                It tells a new faculty member what an SLO is, how to test one, and why the Gen Ed outcomes belong here.
+                Turn it off, or delete the box in Word, once your outcomes are written.
+              </div>
+            </div>
             {d.outcomes.map((o, i) => (
-              <div key={i} data-box-key="outcomes" data-box-index={i} className="flex gap-2 mb-2 items-start">
-                <div style={{ width: 22, paddingTop: 8, color: UI.orangeText, fontWeight: "bold", fontSize: 13 }}>{i + 1}</div>
-                <div style={{ flex: 1 }}><A rows={2} value={o} onChange={(v) => setD((p) => { const a = [...p.outcomes]; a[i] = v; return { ...p, outcomes: a }; })}
-                  placeholder="Students will evaluate ..." /></div>
-                <button onClick={() => drop("outcomes", i)} style={{ color: "#9AA5B5", marginTop: 8, cursor: "pointer" }}><Trash2 size={15} /></button>
+              <CardField key={i} data-box-key="outcomes" data-box-index={i} label={`Outcome ${i + 1}`}
+                onRemove={() => drop("outcomes", i)} removeLabel={`Remove outcome ${i + 1}`}>
+                <A rows={2} value={o} onChange={(v) => setD((p) => { const a = [...p.outcomes]; a[i] = v; return { ...p, outcomes: a }; })}
+                  placeholder="Students will evaluate…" />
+              </CardField>
+            ))}
+            <AddRow onClick={() => push("outcomes", "")}>Add outcome</AddRow>
+
+            <div className="section-title">Outcome library</div>
+            {OUTCOME_LIBRARY.map((g) => (
+              <div key={g.group} className="group-box">
+                <div className="group-head">{g.group}</div>
+                <div className="group-note" style={{ marginTop: 0 }}>{g.note}</div>
+                {g.items.map((it) => {
+                  const added = d.outcomes.includes(it);
+                  return (
+                    <button key={it} type="button" className="library-row" disabled={added}
+                      onClick={() => setD((p) => ({ ...p, outcomes: [...p.outcomes.filter((x) => x.trim()), it] }))}
+                      aria-label={added ? `Already added: ${it}` : `Add outcome: ${it}`}>
+                      <span style={{ flex: 1 }}>{it}</span>
+                      {added
+                        ? <Check size={16} strokeWidth={2.5} aria-hidden="true" style={{ color: UI.good, flexShrink: 0 }} />
+                        : <span className="library-add" aria-hidden="true"><Plus size={14} strokeWidth={2.5} /></span>}
+                    </button>
+                  );
+                })}
               </div>
             ))}
-            <Btn onClick={() => push("outcomes", "")} icon={Plus}>Add outcome</Btn>
-            <div className="mt-6">
-              {OUTCOME_LIBRARY.map((g) => (
-                <div key={g.group} className="mb-4 p-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                  <div style={{ color: UI.navy, fontWeight: "bold", fontSize: 13 }}>{g.group}</div>
-                  <div style={{ color: UI.slate, fontSize: 12, margin: "3px 0 8px" }}>{g.note}</div>
-                  {g.items.map((it) => (
-                    <div key={it} className="flex gap-2 items-start mb-2">
-                         {d.outcomes.includes(it) ? (
-                           <span title="Already in your outcomes" style={{ color: UI.good, marginTop: 2 }}><Check size={14} /></span>
-                         ) : (
-                           <button onClick={() => setD((p) => ({ ...p, outcomes: [...p.outcomes.filter((x) => x.trim()), it] }))}
-                             style={{ color: UI.orangeText, marginTop: 2, cursor: "pointer" }}><Plus size={14} /></button>
-                         )}
-                      <div style={{ fontSize: 12.5, color: UI.slate, lineHeight: 1.45 }}>{it}</div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
           </>)}
 
           {tab === 4 && (<>
@@ -2954,37 +3050,31 @@ export default function SyllabusBuilder() {
             <Field label="Cost note" hint="tell them the real number, and the free path if there is one"><A rows={2} value={d.costNote} onChange={(v) => set("costNote", v)} placeholder="The textbook runs about $60 used. A copy is on reserve at Paul Meek Library. Tell me before the second week if cost is a barrier." /></Field>
             <Field label="Technology and platforms"><A rows={3} value={d.tech} onChange={(v) => set("tech", v)} placeholder="Canvas for all materials and submissions. A phone or laptop microphone is enough for the audio assignments." /></Field>
             <Field label="Access details" hint="answer the questions students always ask: will I be given the book, what format, and where do I get it">
-              <label className="flex items-start gap-2 mb-2 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-                <input type="checkbox" checked={d.materials.provided} onChange={(e) => set("materials", { ...d.materials, provided: e.target.checked })} style={{ marginTop: 3 }} />
-                <span>These materials will be provided to you at no additional cost.</span>
-              </label>
-              <label className="flex items-start gap-2 mb-2 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-                <input type="checkbox" checked={d.materials.hardcopy} onChange={(e) => set("materials", { ...d.materials, hardcopy: e.target.checked })} style={{ marginTop: 3 }} />
-                <span>Available in hardcopy (print).</span>
-              </label>
-              <label className="flex items-start gap-2 mb-2 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-                <input type="checkbox" checked={d.materials.online} onChange={(e) => set("materials", { ...d.materials, online: e.target.checked })} style={{ marginTop: 3 }} />
-                <span>Available online (digital / e-text).</span>
-              </label>
+              {[
+                ["provided", "These materials will be provided to you at no additional cost."],
+                ["hardcopy", "Available in hardcopy (print)."],
+                ["online", "Available online (digital / e-text)."],
+              ].map(([key, text]) => (
+                <SwitchRow key={key} checked={d.materials[key]} onChange={(on) => set("materials", { ...d.materials, [key]: on })}>{text}</SwitchRow>
+              ))}
               <A rows={2} value={d.materials.acquire} onChange={(v) => set("materials", { ...d.materials, acquire: v })} placeholder="Where to acquire them: the UTM Bookstore, a copy on reserve at Paul Meek Library, or the publisher link in Canvas." />
             </Field>
             {d.extraMaterials.map((material, i) => (
-              <div key={i} data-box-key="extraMaterials" data-box-index={i} className="p-3 mb-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                <div className="flex gap-2 mb-2">
-                  <div style={{ flex: 1 }}>
-                    <T value={material.title} onChange={(v) => setDeep("extraMaterials", i, "title", v)} placeholder="Custom material heading" />
-                  </div>
-                  <button onClick={() => drop("extraMaterials", i)} aria-label={`Remove material section ${i + 1}`} style={{ color: UI.muted, cursor: "pointer" }}><Trash2 size={15} /></button>
-                </div>
+              <CardField key={i} data-box-key="extraMaterials" data-box-index={i}
+                title={material.title} onTitle={(v) => setDeep("extraMaterials", i, "title", v)}
+                titlePlaceholder="Section heading" titleLabel={`Material section ${i + 1} heading`}
+                onRemove={() => drop("extraMaterials", i)} removeLabel={`Remove material section ${i + 1}`}>
                 <A rows={3} value={material.description} onChange={(v) => setDeep("extraMaterials", i, "description", v)} placeholder="Describe the additional course material." />
-              </div>
+              </CardField>
             ))}
-            <Btn onClick={() => push("extraMaterials", { title: "", description: "" })} icon={Plus}>Add material section</Btn>
+            <AddRow onClick={() => push("extraMaterials", { title: "", description: "" })}>Add material section</AddRow>
           </>)}
 
           {tab === 5 && (<>
-            <H>Review</H>
-            <Note>A read-only check of the course info and materials you have entered. Anything required that is still empty shows a Fix link that takes you to the right tab.</Note>
+            <H>Summary</H>
+            <Caption>
+              A quick look at your course info and materials. Click any row to go edit it.
+            </Caption>
             <ReviewPanel
               onJump={setTab}
               groups={[
@@ -3017,125 +3107,95 @@ export default function SyllabusBuilder() {
 
 
           {tab === 6 && (<>
-            <H>Assessment and Grading</H>
-            <div className="flex gap-2 mb-4">
-              <button
-                type="button"
-                onClick={() => set("gradingMethod", "percentage")}
-                aria-pressed={d.gradingMethod === "percentage"}
-                className="px-3 py-2 rounded text-sm font-semibold"
-                style={{
-                  background: d.gradingMethod === "percentage" ? C.navy : UI.paper,
-                  color: d.gradingMethod === "percentage" ? "#fff" : UI.navy,
-                  border: `1px solid ${C.navy}`,
-                  cursor: "pointer"
-                }}
-              >
-                Percentage (%)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => set("gradingMethod", "points")}
-                aria-pressed={d.gradingMethod === "points"}
-                className="px-3 py-2 rounded text-sm font-semibold"
-                style={{
-                  background: d.gradingMethod === "points" ? C.navy : UI.paper,
-                  color: d.gradingMethod === "points" ? "#fff" : UI.navy,
-                  border: `1px solid ${C.navy}`,
-                  cursor: "pointer"
-                }}
-              >
-                Points (pts)
-              </button>
+            <H>Assessment and grading</H>
+            <div role="radiogroup" aria-label="Grading method" className="segmented"
+              style={{ "--seg": d.gradingMethod === "points" ? 1 : 0 }}>
+              <span className="segmented-thumb" aria-hidden="true" />
+              {[["percentage", "Percentage (%)"], ["points", "Points (pts)"]].map(([value, label]) => (
+                <button key={value} type="button" role="radio" aria-checked={d.gradingMethod === value}
+                  onClick={() => set("gradingMethod", value)}>{label}</button>
+              ))}
             </div>
-            <Note>Use one row for an individual assignment, such as a final paper, or a grading category, such as quizzes. For a category, enter its combined course weight.</Note>
-            <div className="p-3 mb-4 rounded flex items-center gap-2" style={{
-              background: d.gradingMethod === "points"
-                ? (validPoints ? UI.goodBg : UI.warnBg)
-                : Math.abs(weightTotal - 100) < 0.01 ? UI.goodBg : UI.warnBg,
-              color: d.gradingMethod === "points"
-                ? (validPoints ? UI.good : UI.warn)
-                : Math.abs(weightTotal - 100) < 0.01 ? UI.good : UI.warn,
-              fontSize: 14,
-              fontWeight: "bold"
-            }}>
-              {d.gradingMethod === "points" ? (
-                <>
-                  {validPoints ? <Check size={16} /> : <AlertTriangle size={16} />}
-                  Total: {fmtWeight(pointsTotal)} points
-                  {!validPoints && (
-                    d.items.some((item) => !item.name.trim() && item.points.trim())
-                      ? " — Add a name to the incomplete assignment"
-                      : " — Enter valid points for each assignment"
-                  )}
-                </>
-              ) : (
-                <>
-                  {Math.abs(weightTotal - 100) < 0.01
-                    ? <Check size={16} />
-                    : <AlertTriangle size={16} />}
-                  Weights total {fmtWeight(weightTotal)}%
-                  {Math.abs(weightTotal - 100) < 0.01
-                    ? ""
-                    : `, which is ${weightTotal > 100 ? "over" : "under"} by ${fmtWeight(Math.abs(100 - weightTotal))}`}
-                </>
-              )}
-            </div>
-            {d.items.map((x, i) => (
-              <div key={i} data-box-key="items" data-box-index={i} ref={i === d.items.length - 1 ? lastGradingItemRef : null} className="p-3 mb-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                <div className="flex gap-2 mb-2">
-                  <div style={{ flex: 3 }}><T value={x.name} onChange={(v) => setDeep("items", i, "name", v)} placeholder="Assignment or category" /></div>
-                  {d.gradingMethod === "percentage" ? (
-                    <div style={{ flex: 1 }}>
-                      <T mono value={x.weight}
-                        onChange={(v) => setDeep("items", i, "weight", v)}
-                        placeholder="%" />
-                    </div>
-                  ) : (
-                    <div style={{ flex: 1 }}>
-                      <T mono value={x.points}
-                        onChange={(v) => setDeep("items", i, "points", v)}
-                        placeholder="pts" />
-                    </div>
-                  )}
-                  <div style={{ flex: 1 }}><T value={x.due} onChange={(v) => setDeep("items", i, "due", v)} placeholder="Due date" /></div>
-                  <button onClick={() => drop("items", i)} aria-label={`Remove assignment or category ${i + 1}`} style={{ color: UI.muted, cursor: "pointer" }}><Trash2 size={15} /></button>
+            <Caption>
+              Use one assessment for a single assignment, like a final paper, or for a category, like quizzes.
+              For a category, enter its combined weight.
+            </Caption>
+            {(() => {
+              const isPoints = d.gradingMethod === "points";
+              const ok = isPoints ? validPoints : Math.abs(weightTotal - 100) < 0.01;
+              const detail = isPoints
+                ? (validPoints ? `${fmtWeight(pointsTotal)} points`
+                  : d.items.some((item) => !item.name.trim() && item.points.trim()) ? "Name the unnamed assessment" : "Enter points for each assessment")
+                : ok ? `${fmtWeight(weightTotal)}%`
+                  : `${fmtWeight(weightTotal)}% · ${fmtWeight(Math.abs(100 - weightTotal))} ${weightTotal > 100 ? "over" : "under"}`;
+              return (
+                <div className="total-row" role="status">
+                  <span>Total</span>
+                  <span className={ok ? "is-good" : "is-warn"}>
+                    {detail}{ok ? <Check size={15} strokeWidth={2.5} aria-hidden="true" /> : <AlertTriangle size={14} aria-hidden="true" />}
+                  </span>
                 </div>
-                <A rows={2} value={x.desc} onChange={(v) => setDeep("items", i, "desc", v)} placeholder="Describe the assignment or category." />
-                {realOutcomes.length > 0 && (
-                  <div className="mt-2">
-                    <div style={{ fontSize: 11, color: UI.slate, marginBottom: 4 }}>WHICH OUTCOMES DOES THIS PRODUCE EVIDENCE FOR?</div>
-                    <div className="flex flex-wrap gap-1">
-                      {realOutcomes.map((_, oi) => {
-                        const on = x.slos.includes(oi);
-                        return (
-                          <button key={oi} onClick={() => setDeep("items", i, "slos", on ? x.slos.filter((z) => z !== oi) : [...x.slos, oi])}
-                            style={{ fontSize: 12, padding: "2px 9px", borderRadius: 11, cursor: "pointer",
-                              border: `1px solid ${on ? C.orange : UI.line}`, background: on ? C.orange : UI.paper, color: on ? "#fff" : UI.slate }}>
-                            {oi + 1}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-            <Btn onClick={addGradingItem} icon={Plus}>Add Assignment or Category</Btn>
+              );
+            })()}
+            {d.items.map((x, i) => {
+              const isPoints = d.gradingMethod === "points";
+              return (
+                <div key={i} ref={i === d.items.length - 1 ? lastGradingItemRef : null}>
+                  <CardField data-box-key="items" data-box-index={i}
+                    title={x.name} onTitle={(v) => setDeep("items", i, "name", v)}
+                    titlePlaceholder="Assessment name, like Final paper" titleLabel={`Assessment ${i + 1} name`}
+                    onRemove={() => drop("items", i)} removeLabel={`Remove assessment ${i + 1}`}>
+                    <label className="inset-row">
+                      <span>{isPoints ? "Points" : "Weight"}</span>
+                      <span className="inset-value">
+                        <input className="inset-input" inputMode="decimal" value={isPoints ? x.points : x.weight}
+                          onChange={(e) => setDeep("items", i, isPoints ? "points" : "weight", e.target.value)} placeholder="0" />
+                        <span className="inset-unit">{isPoints ? "pts" : "%"}</span>
+                      </span>
+                    </label>
+                    <label className="inset-row">
+                      <span>Due date</span>
+                      <input className="inset-input" value={x.due} onChange={(e) => setDeep("items", i, "due", e.target.value)} placeholder="Optional" />
+                    </label>
+                    <A rows={2} value={x.desc} onChange={(v) => setDeep("items", i, "desc", v)} placeholder="Describe the assignment or category." />
+                    {realOutcomes.length > 0 && (
+                      <div className="inset-row">
+                        <span>Outcomes</span>
+                        <span className="chips" role="group" aria-label="Outcomes this assessment grades">
+                          {realOutcomes.map((_, oi) => {
+                            const on = x.slos.includes(oi);
+                            return (
+                              <button key={oi} type="button" className="chip" aria-pressed={on} title={realOutcomes[oi]}
+                                aria-label={`Outcome ${oi + 1}`}
+                                onClick={() => setDeep("items", i, "slos", on ? x.slos.filter((z) => z !== oi) : [...x.slos, oi])}>
+                                {oi + 1}
+                              </button>
+                            );
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </CardField>
+                </div>
+              );
+            })}
+            <AddRow onClick={addGradingItem}>Add assessment</AddRow>
             {unmapped.length > 0 && (
-              <div className="mt-4 p-3 rounded flex gap-2" style={{ background: UI.warnBg, color: UI.warn, fontSize: 13 }}>
-                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />
-                <div>Outcome{unmapped.length > 1 ? "s" : ""} {unmapped.map((i) => i + 1).join(", ")} {unmapped.length > 1 ? "have" : "has"} nothing in the grade breakdown producing evidence for {unmapped.length > 1 ? "them" : "it"}. Either attach an assignment or category or rewrite the outcome.</div>
+              <div className="warn-row">
+                <AlertTriangle size={15} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  Outcome{unmapped.length > 1 ? "s" : ""} {unmapped.map((i) => i + 1).join(", ")} {unmapped.length > 1 ? "aren't" : "isn't"} graded
+                  by any assessment yet. Turn {unmapped.length > 1 ? "their numbers" : "its number"} on in an assessment, or rewrite the outcome.
+                </span>
               </div>
             )}
-            <div className="mt-4"><Field label="Grading scale"><A rows={2} value={d.scale} onChange={(v) => set("scale", v)} /></Field></div>
+            <Field label="Grading scale"><A rows={2} value={d.scale} onChange={(v) => set("scale", v)} /></Field>
           </>)}
 
           {tab === 7 && (<>
-            <H>Course Policies</H>
+            <H>Course policies</H>
             <Field label="Attendance">
-              <Dropdown value="" placeholder="Please select a sample attendance policy, then edit it to fit your course" ariaLabel="Sample attendance policy" style={{ marginBottom: 8 }}
+              <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample attendance policy"
                 options={[
                   ["Graded",
                     'Attendance in this course means that you will be present for all in-person class meetings. Roll will be called/marked at the beginning of each class period. If you are not present during roll call, it is your responsibility to see the professor after class so that you may be marked tardy; otherwise, you will be marked absent for the day. If you need to miss class for a valid reason (school events, family matters, appointments, etc.) you must notify the professor in advance of your absence, or as near as possible to the class period in the event of emergencies. You need not be detailed, a simple "I am out sick today" will suffice!'
@@ -3147,8 +3207,8 @@ export default function SyllabusBuilder() {
                     `This course has no fixed meeting time, so attendance is measured by your activity in Canvas rather than by your presence in a room. You are counted present in a given week if you have submitted that week's work, posted to the discussion board, or otherwise engaged with the week's module by the Sunday deadline. Two consecutive weeks with no Canvas activity will trigger an outreach from me and may be reported to Student Success as a retention concern. Federal financial aid regulations also require that we document academically related activity.`
                   ],
                 ].map(([label, text]) => ({ value: text, label }))}
-                onChange={(text) => {
-                  if (d.attendance.trim() && !window.confirm("Replace your current attendance policy?")) return;
+                onChange={async (text) => {
+                  if (d.attendance.trim() && !(await askConfirm({ title: "Replace your attendance policy?", text: "The sample will replace what you've written.", action: "Replace" }))) return;
                   set("attendance", text);
                 }} />
 
@@ -3160,7 +3220,7 @@ export default function SyllabusBuilder() {
               />
             </Field> 
             <Field label="What engagement looks like here" hint="optional, but it removes a lot of guesswork">
-              <Dropdown value="" placeholder="Please select a sample engagement policy, then edit it to fit your course" ariaLabel="Sample engagement policy" style={{ marginBottom: 8 }}
+              <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample engagement policy"
                 options={[
                   [
                     "Discussion & Q&A",
@@ -3179,8 +3239,8 @@ export default function SyllabusBuilder() {
                     "In an online course, engagement means staying visibly connected to the class community each week. Logging into Canvas regularly, posting substantive and timely responses on discussion boards, engaging with your peers' ideas, and reaching out during office hours or by email when questions come up all count."
                   ],
                 ].map(([label, text]) => ({ value: text, label }))}
-                onChange={(text) => {
-                  if (d.participation.trim() && !window.confirm("Replace your current engagement policy?")) return;
+                onChange={async (text) => {
+                  if (d.participation.trim() && !(await askConfirm({ title: "Replace your engagement policy?", text: "The sample will replace what you've written.", action: "Replace" }))) return;
                   set("participation", text);
                 }} />
 
@@ -3192,77 +3252,81 @@ export default function SyllabusBuilder() {
               />
             </Field>
             <Field label="Late work and make-up" hint="choose a sample, then edit as needed">
-              <Dropdown value={d.lateSample} placeholder="Choose a sample policy..." ariaLabel="Sample late work policy"
-                style={{ marginBottom: 8 }} options={LATE_POLICIES.map((policy) => ({ value: policy.label, label: policy.label }))}
-                onChange={(v) => {
+              <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample late work policy"
+                options={LATE_POLICIES.map((policy) => ({ value: policy.label, label: policy.label }))}
+                onChange={async (v) => {
                   const sample = LATE_POLICIES.find((policy) => policy.label === v);
+                  if (d.late.trim() && !(await askConfirm({ title: "Replace your late work policy?", text: "The sample will replace what you've written.", action: "Replace" }))) return;
                   set("lateSample", v);
                   set("late", sample?.text || "");
                 }} />
               <A rows={3} value={d.late} onChange={(v) => set("late", v)} placeholder="Describe your late work deadlines, penalties, extensions, and make-up arrangements." />
             </Field>
             {d.lateAdditional.map((policy, i) => (
-              <div key={i} data-box-key="lateAdditional" data-box-index={i}>
-              <Field label="Additional late work policy" hint="choose a sample, then edit as needed">
-                <Dropdown value={policy.sample} placeholder="Choose a sample policy..." ariaLabel="Sample late work policy"
-                  style={{ marginBottom: 8 }} options={LATE_POLICIES.map((option) => ({ value: option.label, label: option.label }))}
-                  onChange={(v) => {
+              <CardField key={i} data-box-key="lateAdditional" data-box-index={i} label="Another late work policy"
+                onRemove={() => drop("lateAdditional", i)} removeLabel={`Remove late work policy ${i + 2}`}>
+                <Dropdown value="" placeholder="Start from a sample…" ariaLabel="Sample late work policy"
+                  options={LATE_POLICIES.map((option) => ({ value: option.label, label: option.label }))}
+                  onChange={async (v) => {
                     const sample = LATE_POLICIES.find((option) => option.label === v);
+                    if (policy.text.trim() && !(await askConfirm({ title: "Replace this late work policy?", text: "The sample will replace what you've written.", action: "Replace" }))) return;
                     setDeep("lateAdditional", i, "sample", v);
                     setDeep("lateAdditional", i, "text", sample?.text || "");
                   }} />
                 <A rows={3} value={policy.text} onChange={(v) => setDeep("lateAdditional", i, "text", v)} placeholder="Describe an additional late work or make-up arrangement." />
-                <div className="flex justify-end mt-2">
-                  <Btn onClick={() => drop("lateAdditional", i)} icon={Trash2}>Remove policy</Btn>
-                </div>
-              </Field>
-              </div>
+              </CardField>
             ))}
-            <Btn onClick={() => push("lateAdditional", { sample: "", text: "" })} icon={Plus}>Add additional late work policy/paragraph</Btn>
+            <AddRow onClick={() => push("lateAdditional", { sample: "", text: "" })}>Add another late work policy</AddRow>
 
-            <div className="mt-6 mb-2" style={{ color: UI.navy, fontWeight: "bold", fontSize: 14 }}>Artificial Intelligence Policy</div>
-            <Note>UTM's AI policy, effective July 1, 2025, requires every syllabus to state your expectations for student AI use. This is not optional, so pick a tier below. The three tiers match the policy: unrestricted, mixed, and total prohibition.</Note>
-            {Object.entries(AI_POLICIES).map(([k, v]) => (
-              <label key={k} className="flex items-start gap-2 mb-2 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-                <input type="radio" name="ai" checked={d.aiTier === k} onChange={() => set("aiTier", k)} style={{ marginTop: 3 }} />
-                <span>{v.label}</span>
-              </label>
-            ))}
-            {d.aiTier === "custom" && <div className="mt-2"><A rows={7} value={d.aiCustom} onChange={(v) => set("aiCustom", v)}
-              placeholder="Your policy must still affirm academic honesty and state that unpermitted AI use is academic misconduct under the Student Code of Conduct." /></div>}
+            <div className="section-title">Artificial intelligence policy</div>
+            <Caption>
+              Required. UTM's AI policy (effective July 1, 2025) says every syllabus must state your expectations for student AI use,
+              so pick one of its three tiers below or write your own.
+            </Caption>
+            <div className="choice-list" role="radiogroup" aria-label="AI policy tier">
+              {Object.entries(AI_POLICIES).map(([k, v]) => (
+                <label key={k} className="choice-row">
+                  <input type="radio" name="ai" checked={d.aiTier === k} onChange={() => set("aiTier", k)} />
+                  <span style={{ flex: 1 }}>{v.label}</span>
+                  {d.aiTier === k && <Check size={17} strokeWidth={2.5} aria-hidden="true" style={{ color: UI.orangeText, flexShrink: 0 }} />}
+                </label>
+              ))}
+            </div>
+            {d.aiTier === "custom" && <CardField label="Your AI policy"><A rows={7} value={d.aiCustom} onChange={(v) => set("aiCustom", v)}
+              placeholder="Your policy must still affirm academic honesty and state that unpermitted AI use is academic misconduct under the Student Code of Conduct." /></CardField>}
             <div className="mt-4"><Field label="A note from your professor" hint="optional warm box, sits under the policy">
               <A rows={3} value={d.profNote} onChange={(v) => set("profNote", v)} placeholder="If you are ever unsure whether what you are submitting crosses that line, reach out before you submit. That conversation is always easier before the fact than after." /></Field></div>
-            <div className="mt-6 mb-2" style={{ color: UI.navy, fontWeight: "bold", fontSize: 14 }}>Additional Policies</div>
+            <div className="section-title">Additional policies</div>
             {d.customPolicies.map((policy, i) => (
-              <div key={i} className="mb-3 p-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                <div className="flex items-start gap-2">
-                  <div style={{ flex: 1 }}>
-                    <Field label="Policy title"><T value={policy.title} onChange={(v) => setDeep("customPolicies", i, "title", v)} placeholder="Classroom conduct" /></Field>
-                    <Field label="Policy details"><A rows={3} value={policy.text} onChange={(v) => setDeep("customPolicies", i, "text", v)} placeholder="Describe your expectations for students." /></Field>
-                  </div>
-                  <button type="button" onClick={() => drop("customPolicies", i)} aria-label={`Remove custom policy ${i + 1}`} title="Remove policy"
-                    className="p-2 rounded" style={{ color: UI.slate, background: "transparent", border: 0, cursor: "pointer" }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
+              <CardField key={i} title={policy.title} onTitle={(v) => setDeep("customPolicies", i, "title", v)}
+                titlePlaceholder="Policy title, like Classroom conduct" titleLabel={`Custom policy ${i + 1} title`}
+                onRemove={() => drop("customPolicies", i)} removeLabel={`Remove custom policy ${i + 1}`}>
+                <A rows={3} value={policy.text} onChange={(v) => setDeep("customPolicies", i, "text", v)} placeholder="Describe your expectations for students." />
+              </CardField>
             ))}
-            <Btn onClick={() => push("customPolicies", { title: "", text: "" })} icon={Plus}>Add custom policy</Btn>
+            <AddRow onClick={() => push("customPolicies", { title: "", text: "" })}>Add custom policy</AddRow>
           </>)}
 
           {tab === 8 && (<>
-            <H>University Policies</H>
-            <Note>CTL maintains this language and checks it each term. Leave it checked and it stays current. If you edit it in Word after export, you own the accuracy of the edit.</Note>
-            {Object.entries(LOCKED).map(([k, v]) => (
-              <div key={k} className="mb-3 p-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                <label className="flex items-center gap-2" style={{ cursor: "pointer" }}>
-                  <input type="checkbox" checked={d.inc[k]} onChange={(e) => set("inc", { ...d.inc, [k]: e.target.checked })} />
-                  <Lock size={12} style={{ color: UI.orangeText }} />
-                  <span style={{ color: UI.navy, fontWeight: "bold", fontSize: 13.5 }}>{v.title}</span>
-                </label>
-                <div style={{ fontSize: 12, color: UI.slate, marginTop: 6, lineHeight: 1.5, maxHeight: 86, overflow: "auto", whiteSpace: "pre-wrap" }}>{v.text}</div>
-              </div>
-            ))}
+            <H>University policies</H>
+            <Caption>
+              CTL keeps this language current each term, so leave it on. If you edit it in Word after exporting, you own the accuracy of the edit.
+            </Caption>
+            {Object.entries(LOCKED).map(([k, v]) => {
+              const full = fullPolicies.includes(k);
+              return (
+                <div key={k} className={`group-box${d.inc[k] ? "" : " is-off"}`}>
+                  <SwitchRow checked={d.inc[k]} onChange={(on) => set("inc", { ...d.inc, [k]: on })}>
+                    <span className="policy-title">{v.title}<Lock size={12} aria-label="CTL-maintained language" /></span>
+                  </SwitchRow>
+                  <div className={`policy-text${full ? " is-full" : ""}`}>{v.text}</div>
+                  <button type="button" className="policy-more" aria-expanded={full}
+                    onClick={() => setFullPolicies((f) => (full ? f.filter((x) => x !== k) : [...f, k]))}>
+                    {full ? "Show less" : "Show more"}
+                  </button>
+                </div>
+              );
+            })}
           </>)}
 
           {tab === 9 && (<>
@@ -3288,152 +3352,120 @@ export default function SyllabusBuilder() {
                 })) }));
               }} />
             </Field>
-            <div className="flex gap-2 flex-wrap mb-4">
-              <Btn onClick={() => applySummerPreset("summer-full")} icon={Plus}>Add full summer schedule</Btn>
-              <Btn onClick={() => applySummerPreset("summer-first-half")} icon={Plus}>Add first half</Btn>
-              <Btn onClick={() => applySummerPreset("summer-second-half")} icon={Plus}>Add second half</Btn>
-            </div>
             <Field label="Class meets on" hint={cal ? `dates come from the ${d.term} registrar calendar` : "pick a term on the Course tab to use the registrar calendar"}>
-              <div className="flex flex-wrap gap-1">
-                {CLASS_DAYS.map(([n, name]) => {
-                  const on = d.meetDays.includes(n);
-                  return (
-                    <button key={n} type="button" aria-pressed={on} aria-label={DAY_NAMES[n]} onClick={() => toggleDay(n)}
-                      style={{ fontSize: 13, padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontWeight: on ? "bold" : "normal",
-                        border: `1px solid ${on ? C.orange : UI.line}`, background: on ? C.orange : UI.paper, color: on ? "#fff" : UI.slate }}>
-                      {name}
-                    </button>
-                  );
-                })}
-              </div>
+              <DayChips days={d.meetDays} onToggle={toggleDay} />
             </Field>
             {auto ? (
-              <Note>Weeks and dates are built from the days you picked. Holidays that fall on those days are marked "No class." Fill in topics and due dates below.</Note>
+              <Caption>
+                Weeks and dates come from the days you picked. Holidays on those days are marked "No class." Fill in topics and due dates below.
+              </Caption>
             ) : (
               <>
-                <Note>Choose the first day of classes and the builder will fill each week's Monday-to-Friday date range automatically. You can still edit any individual week afterward.</Note>
-                <div className="flex gap-2 items-end flex-wrap mb-4">
-                  <div style={{ minWidth: 220 }}>
-                    <Lbl hint="used for automatic week dates">Semester start</Lbl>
-                    <T type="date" value={d.semesterStart} onChange={(v) => set("semesterStart", v)} />
-                  </div>
-                  <Btn onClick={autofillScheduleDates} icon={CalendarDays}>Autofill dates</Btn>
-                  {d.scheduleType !== "modular" && (
-                    <Btn onClick={buildSemesterSchedule} icon={CalendarDays}>Build 15 weeks with dates</Btn>
-                  )}
-                </div>
+                <Caption>
+                  Pick the first day of classes and each week's Monday-to-Friday dates fill in. You can still edit any week afterward.
+                </Caption>
+                <Field label="Semester start" hint="used for automatic week dates">
+                  <DateField label="Semester start" value={d.semesterStart} onChange={(v) => set("semesterStart", v)} />
+                </Field>
+                <AddRow onClick={autofillScheduleDates} icon={CalendarDays}>Autofill dates</AddRow>
+                {d.scheduleType !== "modular" && (
+                  <AddRow onClick={buildSemesterSchedule} icon={CalendarDays}>Build 15 weeks with dates</AddRow>
+                )}
               </>
             )}
             {d.term === "Fall 2026" ? (
-              <label className="flex items-start gap-2 mb-4 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-                <input type="checkbox" checked={d.calNote} onChange={(e) => set("calNote", e.target.checked)} style={{ marginTop: 3 }} />
-                <span>Append the Fall 2026 registrar dates: add and drop deadlines, Fall Break, Thanksgiving, finals, and commencement.</span>
-              </label>
+              <div className="group-box">
+                <SwitchRow checked={d.calNote} onChange={(on) => set("calNote", on)}>Add the Fall 2026 registrar dates</SwitchRow>
+                <div className="group-note">Add and drop deadlines, Fall Break, Thanksgiving, finals, and commencement.</div>
+              </div>
             ) : (
-              <Note>The built-in add/drop and deadline table is currently available only for Fall 2026, so it will not be appended for this semester.</Note>
+              <Caption>
+                The add/drop and deadline table is only built in for Fall 2026, so it isn't added for this semester.
+              </Caption>
             )}
             {schedRows.map((w, i) => (
-              <div key={i} data-box-key="weeks" data-box-index={i} className="p-3 mb-3 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-                {auto ? (
-                  <div className="mb-2">
-                    <span style={{ color: UI.navy, fontWeight: "bold", fontSize: 14 }}>{w.label}</span>
-                    <span style={{ color: UI.slate, fontSize: 13, marginLeft: 8 }}>{w.dates}</span>
-                    {w.off.map((o) => <div key={o} style={{ color: UI.warn, fontSize: 12.5, fontWeight: "bold", marginTop: 2 }}>{o}</div>)}
-                  </div>
-                ) : (
-                  <div className="flex gap-2 mb-2">
-                    <div style={{ flex: 1 }}><T value={w.label} onChange={(v) => setDeep("weeks", i, "label", v)} placeholder={d.scheduleType === "modular" ? `Module ${i + 1}` : `Week ${i + 1}`} /></div>
-                    <div style={{ flex: 2 }}><T value={w.dates} onChange={(v) => setDeep("weeks", i, "dates", v)} placeholder={d.scheduleType === "modular" ? "Module dates (optional)" : "August 24 to 28"} /></div>
-                    <button onClick={() => drop("weeks", i)} style={{ color: UI.muted, cursor: "pointer" }}><Trash2 size={15} /></button>
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <div style={{ flex: 2 }}><A rows={3} value={w.topics} onChange={(v) => setWeek(i, "topics", v)} placeholder="Topic and readings" /></div>
-                  <div style={{ flex: 1 }}><A rows={3} value={w.due} onChange={(v) => setWeek(i, "due", v)} placeholder="Due" /></div>
-                </div>
-              </div>
+              auto ? (
+                <CardField key={i} data-box-key="weeks" data-box-index={i}
+                  label={<>{w.label} <span className="week-dates">{w.dates}</span></>}>
+                  {w.off.map((o) => <div key={o} className="week-off">{o}</div>)}
+                  <A rows={3} value={w.topics} onChange={(v) => setWeek(i, "topics", v)} placeholder="Topic and readings" />
+                  <A rows={1} value={w.due} onChange={(v) => setWeek(i, "due", v)} placeholder="Due" />
+                </CardField>
+              ) : (
+                <CardField key={i} data-box-key="weeks" data-box-index={i}
+                  title={w.label} onTitle={(v) => setDeep("weeks", i, "label", v)}
+                  titlePlaceholder={d.scheduleType === "modular" ? `Module ${i + 1}` : `Week ${i + 1}`} titleLabel={`Entry ${i + 1} name`}
+                  onRemove={() => drop("weeks", i)} removeLabel={`Remove ${w.label || `entry ${i + 1}`}`}>
+                  <label className="inset-row">
+                    <span>Dates</span>
+                    <input className="inset-input" style={{ width: 200 }} value={w.dates} onChange={(e) => setDeep("weeks", i, "dates", e.target.value)}
+                      placeholder={d.scheduleType === "modular" ? "Optional" : "August 24 to 28"} />
+                  </label>
+                  <A rows={3} value={w.topics} onChange={(v) => setWeek(i, "topics", v)} placeholder="Topic and readings" />
+                  <A rows={1} value={w.due} onChange={(v) => setWeek(i, "due", v)} placeholder="Due" />
+                </CardField>
+              )
             ))}
-            {!auto && (<div className="flex gap-2 flex-wrap items-start">
-              <Btn onClick={() => {
+            {!auto && (<>
+              <AddRow onClick={() => {
                 const i = d.weeks.length;
                 const dates = buildWeekDates(d.semesterStart, i + 1);
                 push("weeks", { label: `${d.scheduleType === "modular" ? "Module" : "Week"} ${i + 1}`, dates: dates[i] || "", topics: "", due: "" });
-              }} icon={Plus}>Add {d.scheduleType === "modular" ? "module" : "week"}</Btn>
-              <div style={{ flex: "0 0 250px" }}>
-                <div className="flex gap-2">
-                  <input //text box
-                    type="text" 
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    aria-label={`Number of ${d.scheduleType === "modular" ? "modules" : "weeks"}`}
-                    aria-invalid={weekCountWarning}
-                    placeholder="1-15"
-                    style={{ ...inputBase, width: 110 }}
-                    value={weekCount}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (!/^[0-9]*$/.test(value)) {
-                        setWeekCountWarning(true);
-                        return;
-                      }
-                      setWeekCount(value);
-                      setWeekCountWarning(!value || Number(value) < 1 || Number(value) > 15);
-                    }}
-                  />
-                  <Btn onClick={() => {
-                    const count = Number(weekCount); // builds the number of weeks input
-                    if (!/^[0-9]+$/.test(weekCount) || count < 1 || count > 15) {
-                      setWeekCountWarning(true);
-                      return;
-                    }
-                    setWeekCountWarning(false); 
-                    setD((p) => ({
-                      ...p,
-                      weeks: Array.from({ length: count }, (_, i) => p.weeks[i] || {
-                        label: `${p.scheduleType === "modular" ? "Module" : "Week"} ${i + 1}`,
-                        dates: "",
-                        topics: "",
-                        due: "",
-                      }),
-                    }));
-                  }}>{d.scheduleType === "modular" ? "Build modules" : "Build weeks"}</Btn>
-                </div>
-                <div role="alert" className="mt-1 text-xs" style={{ color: UI.warn, minHeight: 32 }}>
-                  {weekCountWarning ? "Enter a whole number between 1-15." : ""/* displays a warning if the week count is invalid */}
+              }}>Add {d.scheduleType === "modular" ? "module" : "week"}</AddRow>
+              <div className="group-box">
+                <label className="inset-row" style={{ marginTop: 0 }}>
+                  <span>Number of {d.scheduleType === "modular" ? "modules" : "weeks"}</span>
+                  <span className="inset-value">
+                    <input className="inset-input" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="1–15"
+                      aria-invalid={weekCountWarning} value={weekCount}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!/^[0-9]*$/.test(value)) { setWeekCountWarning(true); return; }
+                        setWeekCount(value);
+                        setWeekCountWarning(!value || Number(value) < 1 || Number(value) > 15);
+                      }} />
+                    <button type="button" className="pill-button" onClick={() => {
+                      const count = Number(weekCount);
+                      if (!/^[0-9]+$/.test(weekCount) || count < 1 || count > 15) { setWeekCountWarning(true); return; }
+                      setWeekCountWarning(false);
+                      setD((p) => ({
+                        ...p,
+                        weeks: Array.from({ length: count }, (_, i) => p.weeks[i] || {
+                          label: `${p.scheduleType === "modular" ? "Module" : "Week"} ${i + 1}`, dates: "", topics: "", due: "",
+                        }),
+                      }));
+                    }}>Build</button>
+                  </span>
+                </label>
+                <div role="alert" className="group-note" style={{ color: UI.warn, minHeight: weekCountWarning ? undefined : 0, padding: weekCountWarning ? undefined : 0 }}>
+                  {weekCountWarning ? "Enter a whole number from 1 to 15." : ""}
                 </div>
               </div>
-              <Btn onClick={() => {
-                if (d.weeks.length && !window.confirm("Delete all weeks? This cannot be undone.")) return;
+              <button type="button" className="destructive-row" style={{ marginTop: 6 }} onClick={async () => {
+                const unit = d.scheduleType === "modular" ? "modules" : "weeks";
+                if (d.weeks.length && !(await askConfirm({ title: `Delete all ${unit}?`, text: "Their topics and due dates will be erased. You can't undo this.", action: "Delete", destructive: true }))) return;
                 setD((p) => ({ ...p, weeks: [] }));
-              }}>Delete All</Btn>
-            </div>)}
+              }}>Delete all {d.scheduleType === "modular" ? "modules" : "weeks"}</button>
+            </>)}
           </>)}
 
             {tab === 10 && (<>
-            <H>Laboratory Component</H>
-            <label className="flex items-start gap-2 mb-4 text-sm" style={{ color: UI.slate, cursor: "pointer" }}>
-              <input type="checkbox" checked={d.hasLab} onChange={(e) => set("hasLab", e.target.checked)} style={{ marginTop: 3 }} />
-              <span>This course has a lab component. Checking this adds a Laboratory Component section to the syllabus.</span>
-            </label>
+            <H>Lab component</H>
+            <div className="group-box">
+              <SwitchRow checked={d.hasLab} onChange={(on) => set("hasLab", on)}>This course has a lab</SwitchRow>
+              <div className="group-note">Adds a Laboratory Component section to the syllabus.</div>
+            </div>
             {d.hasLab && (<>
-              <Note>Students often ask three things about a lab: does it count toward my course grade, what happens if I miss one, and what do I need to bring. Answering those here saves you the emails.</Note>
+              <Caption>
+                Students always ask three things about a lab: does it count toward my grade, what if I miss one, and what do I bring.
+                Answering them here saves you the emails.
+              </Caption>
               <div className="flex gap-3 flex-wrap">
                 <div style={{ flex: "1 1 130px" }}><Field label="Lab section / CRN"><T value={d.lab.crn} onChange={(v) => setLab("crn", v)} placeholder="12346" maxLength={5} /></Field></div>
                 <div style={{ flex: "2 1 220px" }}><Field label="Lab instructor" hint="if different from you"><T value={d.lab.instructor} onChange={(v) => setLab("instructor", v)} /></Field></div>
               </div>
               <Field label="Lab meets on" hint="Select the days this lab meets">
-                <div className="flex flex-wrap gap-1">
-                  {CLASS_DAYS.map(([n, name]) => {
-                    const on = (d.lab.meetDays || []).includes(n);
-                    return (
-                      <button key={n} type="button" aria-pressed={on} aria-label={DAY_NAMES[n]} onClick={() => toggleLabDay(n)}
-                        style={{ fontSize: 13, padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontWeight: on ? "bold" : "normal",
-                          border: `1px solid ${on ? C.orange : UI.line}`, background: on ? C.orange : UI.paper, color: on ? "#fff" : UI.slate }}>
-                        {name}
-                      </button>
-                    );
-                  })}
-                </div>
+                <DayChips days={d.lab.meetDays || []} onToggle={toggleLabDay} />
               </Field>
               <Field label="Lab meeting time">
                 <T value={d.lab.meeting} onChange={(v) => setLab("meeting", v)} placeholder="2:00 to 4:50 p.m." />
@@ -3450,154 +3482,150 @@ export default function SyllabusBuilder() {
 
 
           {tab === tabIndex("Accessibility") && (<>
-            <H>Accessibility Check</H>
-            <p style={{ fontSize: 13.5, color: UI.slate, lineHeight: 1.55, marginBottom: 14 }}>
-              These checks look for common problems that make a syllabus hard to use with a screen reader
-              or hard to read, similar to what YuJa Panorama flags in Canvas. Everything runs here in your
-              browser; nothing is sent anywhere. Fixing these is recommended but does not block export.
-            </p>
-            <div className="mb-3" style={{ fontSize: 14, fontWeight: "bold", color: UI.ink }} role="status">
-              {a11ySummary}
-            </div>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {a11yChecks.map((c) => {
-                const status = c.found.length ? c.level : "pass";
-                const StatusIcon = status === "pass" ? Check : status === "fail" ? CircleX : AlertTriangle;
-                const statusText = status === "pass" ? "Pass" : status === "fail" ? "Fail" : "Warning";
-                const statusColor = status === "pass" ? UI.good : UI.warn;
-                const tabsToVisit = [...new Set(c.found.map((p) => p.tab))];
+            <H>Accessibility check</H>
+            <Caption>
+              Looks for common problems that make a syllabus hard to use with a screen reader or hard to read,
+              like YuJa Panorama does in Canvas. It runs in your browser, nothing is sent anywhere, and it never blocks export.
+            </Caption>
+            <div className="group-title" style={{ marginTop: 20 }} role="status">{a11ySummary}</div>
+            {/* problems first */}
+            <div className="row-list">
+              {[...a11yChecks].sort((a, b) => (b.found.length > 0) - (a.found.length > 0)).map((c) => {
+                const n = c.found.length;
                 return (
-                  <li key={c.id} className="mb-3 p-3 rounded"
-                    style={{ background: UI.paper, border: `1px solid ${UI.line}`, fontSize: 13.5, color: UI.ink }}>
-                    <div className="flex items-start gap-2">
-                      <StatusIcon size={16} aria-hidden="true" style={{ color: statusColor, flexShrink: 0, marginTop: 2 }} />
-                      <div style={{ flex: 1, fontWeight: "bold" }}>{c.title}</div>
-                      <span style={{ fontSize: 12, fontWeight: "bold", color: statusColor }}>{statusText}</span>
+                  <div key={c.id} className="expand-group">
+                    <div className="list-row" style={{ cursor: "default" }}>
+                      <span className="row-label">{c.title}</span>
+                      <span className="row-detail" style={n && c.level === "fail" ? { color: UI.warn } : undefined}>
+                        {!n ? "" : c.level === "fail" ? `${n} to fix` : `${n} to review`}
+                      </span>
+                      {!n && <Check size={15} aria-label="Passed" style={{ color: UI.good, flexShrink: 0 }} />}
                     </div>
-                    {status !== "pass" && (
-                      <div style={{ marginLeft: 24, marginTop: 6, lineHeight: 1.5 }}>
-                        <ul style={{ listStyle: "disc", paddingLeft: 18, margin: "0 0 8px" }}>
-                          {c.found.map((p, i) => (
-                            <li key={i}>
-                              <span style={{ color: UI.slate }}>{p.tab} › {p.label}</span>
-                              {p.quote && <>: “{p.quote}”</>}
-                              {p.note && <>{p.quote ? " · " : " "}{p.note}</>}
-                            </li>
-                          ))}
-                        </ul>
-                        <p style={{ margin: "0 0 4px", color: UI.slate }}><strong>Why it matters:</strong> {c.why}</p>
-                        <p style={{ margin: "0 0 8px", color: UI.slate }}><strong>How to fix:</strong> {c.fix}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {tabsToVisit.map((t) => (
-                            <Btn key={t} onClick={() => setTab(tabIndex(t))} icon={ChevronRight}>Go to {t}</Btn>
-                          ))}
-                        </div>
+                    {n > 0 && (
+                      <div className="open-list">
+                        {c.found.map((p, k) => (
+                          <button key={k} className="list-item" onClick={() => setTab(tabIndex(p.tab))}>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              {p.tab} › {p.label}
+                              {(p.quote || p.note) && (
+                                <span className="item-note">
+                                  {p.quote && <>“{p.quote}”</>}{p.quote && p.note && " · "}{p.note}
+                                </span>
+                              )}
+                            </span>
+                            <span className="item-go">Fix<ChevronRight size={13} aria-hidden="true" /></span>
+                          </button>
+                        ))}
+                        <div className="detail-text"><b>Why it matters.</b> {c.why}</div>
+                        <div className="detail-text"><b>How to fix.</b> {c.fix}</div>
                       </div>
                     )}
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </>)}
 
           {tab === tabIndex("Export") && (<>
-            <H>Review and Export</H>
-            <div className="mb-5">
-              {checks.map(([label, ok]) => (
-                <div key={label} className="flex items-start gap-2 py-1" style={{ fontSize: 13.5, color: ok ? UI.ink : UI.warn }}>
-                  {ok ? <Check size={15} style={{ color: UI.good, flexShrink: 0, marginTop: 2 }} />
-                      : <AlertTriangle size={15} style={{ color: UI.warn, flexShrink: 0, marginTop: 2 }} />}
-                  <span>{label}</span>
-                </div>
-              ))}
+            <H>Review and export</H>
+            <div className="export-actions" style={{ marginTop: 0 }}>
+              <button className="export-button" onClick={() => confirmThenExport(exportWord)}>
+                <span className="export-badge" aria-hidden="true"><FileText size={18} strokeWidth={1.75} /></span>
+                <span className="export-text"><b>Word</b><small>Keep editing it</small></span>
+                <Download size={16} className="export-arrow" aria-hidden="true" />
+              </button>
+              <button className="export-button" onClick={() => confirmThenExport(exportPdf)}>
+                <span className="export-badge" aria-hidden="true"><Printer size={18} strokeWidth={1.75} /></span>
+                <span className="export-text"><b>PDF</b><small>Choose Save as PDF</small></span>
+                <Download size={16} className="export-arrow" aria-hidden="true" />
+              </button>
             </div>
-            {/* Accessibility summary: warns only, never blocks export */}
-            <div className="flex flex-wrap items-center gap-2 mb-4 p-3 rounded" role="status"
-              style={{ background: UI.paper, border: `1px solid ${UI.line}`, color: UI.ink, fontSize: 13.5 }}>
-              {a11yFailCount + a11yWarnCount === 0
-                ? <Check size={16} aria-hidden="true" style={{ color: UI.good, flexShrink: 0 }} />
-                : <AlertTriangle size={16} aria-hidden="true" style={{ color: UI.warn, flexShrink: 0 }} />}
-              <span style={{ flex: "1 1 200px" }}>
-                {a11ySummary}
-                {a11yFailCount + a11yWarnCount > 0 && " Fixing them is recommended, but you can still export."}
-              </span>
-              {a11yFailCount + a11yWarnCount > 0 && (
-                <Btn onClick={() => setTab(tabIndex("Accessibility"))} icon={ChevronRight}>Review accessibility</Btn>
+            <Caption>
+              Both come out in Cambria with the UT Martin banner and real heading styles, so screen readers can navigate them.
+              PDF opens your browser's print dialog. Nothing is saved anywhere, so export before you close this tab.
+            </Caption>
+            {/* one row per tab, click to go there */}
+            <div className="group-title" style={{ marginTop: 20 }}>
+              {passed === checks.length ? "Everything's ready" : `${checks.length - passed} left to finish`}
+            </div>
+            <div className="row-list">
+              {[...new Set(checks.filter((c) => !c[1]).map((c) => c[2]))].map((where) => {
+                const missing = checks.filter((c) => !c[1] && c[2] === where).map((c) => c[0]);
+                const open = openChecks.includes(where);
+                const toggle = () => setOpenChecks((o) => (open ? o.filter((w) => w !== where) : [...o, where]));
+                return (
+                  <ExpandRow key={where} open={open} onToggle={toggle} label={where}
+                    summary={open ? `${missing.length} missing` : missing.join(", ")}>
+                    {missing.map((label) => (
+                      <button key={label} className="list-item" onClick={() => setTab(tabIndex(where))}>
+                        <span style={{ flex: 1 }}>{label}</span>
+                        <span className="item-go">Fix<ChevronRight size={13} aria-hidden="true" /></span>
+                      </button>
+                    ))}
+                  </ExpandRow>
+                );
+              })}
+              <button className="list-row" onClick={() => setTab(tabIndex("Accessibility"))}>
+                <span className="row-label">Accessibility</span>
+                <span className="row-detail" role="status">{a11ySummary}</span>
+                <ChevronRight size={15} aria-hidden="true" style={{ color: UI.muted, flexShrink: 0 }} />
+              </button>
+              {passed > 0 && (
+                <ExpandRow open={showDone} onToggle={() => setShowDone((v) => !v)} label="Completed" summary={`${passed} done`}>
+                  {checks.filter((c) => c[1]).map(([label]) => (
+                    <div key={label} className="list-item is-done">
+                      <span style={{ flex: 1 }}>{label}</span>
+                      <Check size={14} aria-hidden="true" style={{ color: UI.good, flexShrink: 0 }} />
+                    </div>
+                  ))}
+                </ExpandRow>
               )}
             </div>
-            <Note>Nothing here is stored anywhere. Closing this tab clears it. Export your syllabus to Word or PDF before closing.</Note>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <Btn onClick={() => confirmThenExport(exportWord)} icon={FileDown} primary>Export to Word</Btn>
-              <Btn onClick={() => confirmThenExport(exportPdf)} icon={Printer} primary>Export to PDF</Btn>
-              <Btn onClick={clearForm} icon={Trash2}>Clear form</Btn>
-            </div>
-            <div style={{ fontSize: 12, color: UI.slate, marginTop: 14, lineHeight: 1.55 }}>
-              Word opens the export as a normal document you can keep editing. PDF opens your browser's print dialog, where you choose Save as PDF. Both come out in Cambria with the UT Martin banner and real Word heading styles, so a screen reader can navigate it.
-            </div>
+            {a11yFailCount + a11yWarnCount > 0 && (
+              <Caption>Fixing accessibility issues is recommended, but you can still export.</Caption>
+            )}
+            <button className="destructive-row" onClick={clearForm}>Clear form</button>
           </>)}
         </div>
 
         {/* preview */}
-        <div className={previewFullscreen ? "" : "p-5 app-panel editor-preview"} style={previewFullscreen
+        <div role="region" aria-label="Preview" className={previewFullscreen ? "" : `p-5 app-panel editor-preview${previewOpen ? "" : " is-hidden"}`} style={previewFullscreen
           ? { position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", background: UI.wash }
           : { flex: "1 1 460px", minWidth: 360 }}>
-          <div className="flex items-center justify-between gap-3 mb-2" style={{
-            color: UI.slate, fontSize: 12, letterSpacing: 1,
+          <div className="flex items-center justify-end gap-3 mb-2" style={{
+            color: UI.slate, fontSize: 13,
             ...(previewFullscreen ? { background: UI.paper, borderBottom: `1px solid ${UI.line}`, padding: "12px 20px", marginBottom: 0 } : {}),
           }}>
-                        <div className="flex items-center gap-2">
-              <ChevronRight size={13} style={{ color: UI.orangeText }} />
-              {printColors ? "THIS IS EXACTLY WHAT EXPORTS" : "DARK PREVIEW · EXPORTS PRINT IN LIGHT"}
-            </div>
-            <div className="flex items-center gap-2">
+            <div className="icon-group">
               {theme === "dark" && (
-                <button
-                  type="button"
-                  onClick={() => setShowPrinted((on) => !on)}
-                  aria-pressed={showPrinted}
-                  title="Show the preview in the light colors it prints in"
-                  className="px-3 py-2 rounded text-sm font-semibold"
-                  style={{ background: showPrinted ? UI.tint : UI.paper, color: UI.navy, border: `1px solid ${UI.line}`, cursor: "pointer", letterSpacing: 0 }}
-                >
-                  Show as printed
+                <button type="button" className="icon-button" onClick={() => changeLook(() => setShowPrinted((on) => !on))} aria-pressed={showPrinted}
+                  aria-label="Show as printed" title={showPrinted ? "Back to the dark preview" : "Show as printed (exports always print in light colors)"}>
+                  <Printer size={16} />
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setShowTextKeybinds(true)}
-                title="Show the text formatting keybinds"
-                className="px-3 py-2 rounded text-sm font-semibold"
-                style={{ background: UI.paper, color: UI.navy, border: `1px solid ${UI.line}`, cursor: "pointer", letterSpacing: 0 }}
-              >
-                Text keybinds
+              <button type="button" className="icon-button" onClick={() => setShowTextKeybinds(true)}
+                aria-label="Text keybinds" title="Text formatting keybinds">
+                <Keyboard size={16} />
               </button>
-              <button
-                type="button"
-                onClick={() => setPreviewFullscreen((fullscreen) => !fullscreen)}
-                aria-label={previewFullscreen ? "Exit fullscreen preview" : "Open fullscreen preview"}
-                aria-pressed={previewFullscreen}
-                title={previewFullscreen ? "Exit fullscreen (Esc)" : "Open fullscreen preview"}
-                className="flex items-center gap-2 px-3 py-2 rounded text-sm font-semibold"
-                style={{ background: UI.paper, color: UI.navy, border: `1px solid ${UI.line}`, cursor: "pointer", letterSpacing: 0 }}
-              >
-                {previewFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-                {previewFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              <button type="button" className="icon-button" onClick={() => setPreviewFullscreen((f) => !f)} aria-pressed={previewFullscreen}
+                aria-label={previewFullscreen ? "Exit fullscreen preview" : "Fullscreen preview"}
+                title={previewFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen preview"}>
+                {previewFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
+              {!previewFullscreen && (
+                <button type="button" className="icon-button" onClick={() => setPreviewOpen(false)}
+                  aria-label="Hide preview" title="Hide the preview">
+                  <PanelRightClose size={16} />
+                </button>
+              )}
             </div>
           </div>
           <div style={previewFullscreen
             ? { flex: 1, minHeight: 0, overflow: "auto", padding: "24px clamp(16px, 5vw, 72px)" }
             : {}}>
-                        <div ref={previewRef} className={showPrinted ? "doc-preview" : "doc-preview themed"} style={{
-              border: `1px solid ${UI.line}`, borderRadius: 3, boxSizing: "border-box",
-              width: "8.5in", maxWidth: "100%", padding: "0.8in",
-              maxHeight: previewFullscreen ? "none" : "calc(100vh - 196px)", overflow: previewFullscreen ? "visible" : "auto",
-              boxShadow: "0 1px 4px rgba(11,34,64,.08)",
-              ...(previewFullscreen ? { maxWidth: 1100, minHeight: "100%", margin: "0 auto" } : {}),
-            }}>
-              <style>{PREVIEW_CSS}</style>
-              <div dangerouslySetInnerHTML={{ __html: docBody || `<p class="soft">Start on the left. The document builds itself here.</p>` }} />
-            </div>
+            <PagedPreview ref={previewRef} css={PREVIEW_CSS} fullscreen={previewFullscreen} dark={theme === "dark"}
+              pageClass={showPrinted ? "doc-preview" : "doc-preview themed"}
+              html={docBody || `<p class="soft">Start on the left. The document builds itself here.</p>`} />
           </div>
         </div>
       </div>
@@ -3605,10 +3633,9 @@ export default function SyllabusBuilder() {
   );
 }
 
-/** Renders the orange-underlined heading used at the top of each editor section. */
+// tab title
 function H({ children }) {
-  return <div style={{ color: UI.navy, fontWeight: "bold", fontSize: 17, marginBottom: 12,
-    borderBottom: `2px solid ${C.orange}`, paddingBottom: 6, display: "inline-block" }}>{children}</div>;
+  return <div className="page-title">{children}</div>;
 }
 
 function ReviewPanel({ groups, onJump }) {
@@ -3622,40 +3649,34 @@ function ReviewPanel({ groups, onJump }) {
   };
   const missing = groups.flatMap((g) => g.rows).filter((r) => r.required && !has(r.value)).length;
 
-  return (
-    <div className="mt-6 rounded" style={{ background: UI.paper, border: `1px solid ${UI.line}` }}>
-      <div className="flex items-center gap-2 px-4 py-3" style={{
-        borderBottom: `1px solid ${UI.line}`,
-        background: missing ? UI.warnBg : UI.goodBg,
-        color: missing ? UI.warn : UI.good, fontWeight: "bold", fontSize: 14 }}>
-        {missing ? <AlertTriangle size={15} /> : <Check size={15} />}
-        {missing
-          ? `Review: ${missing} required item${missing > 1 ? "s" : ""} still missing`
-          : "Review: course info and materials look complete"}
-      </div>
-      <div className="px-4 py-2">
-        {groups.map((g) => (
-          <div key={g.title} className="mb-3">
-            <div style={{ color: UI.navy, fontWeight: "bold", fontSize: 12, letterSpacing: 1,
-              textTransform: "uppercase", margin: "10px 0 4px" }}>{g.title}</div>
-            {g.rows.map((r) => {
-              const filled = has(r.value);
-              return (
-                <div key={r.label} className="flex gap-3 py-1" style={{ fontSize: 13, borderTop: `1px solid ${UI.wash}` }}>
-                  <div style={{ width: 130, flexShrink: 0, color: UI.slate }}>{r.label}</div>
-                  <div style={{ flex: 1, whiteSpace: "pre-wrap", color: filled ? UI.ink : r.required ? UI.warn : UI.muted }}>
-                    {filled ? plain(r.value) : r.required ? "Not entered" : "Not entered (optional)"}
-                  </div>
-                  {!filled && r.required && r.tab !== undefined && (
-                    <button onClick={() => onJump(r.tab)}
-                      style={{ color: UI.orangeText, fontSize: 12, fontWeight: "bold", cursor: "pointer" }}>Fix</button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+  return (<>
+    <div className="total-row" role="status">
+      <span>Required items</span>
+      <span className={missing ? "is-warn" : "is-good"}>
+        {missing ? `${missing} missing` : "All filled"}
+        {missing ? <AlertTriangle size={14} aria-hidden="true" /> : <Check size={15} strokeWidth={2.5} aria-hidden="true" />}
+      </span>
     </div>
-  );
+    {groups.map((g) => (
+      <div key={g.title}>
+        <div className="section-title">{g.title}</div>
+        <div className="group-box summary-group">
+          {g.rows.map((r) => {
+            const filled = has(r.value);
+            return (
+              <button key={r.label} type="button" className="summary-row" onClick={() => onJump(r.tab)}>
+                <span className="summary-label">{r.label}</span>
+                <span className={`summary-value${filled ? "" : r.required ? " is-missing" : " is-empty"}`}>
+                  {filled ? plain(r.value) : r.required ? "Not entered" : "Optional"}
+                </span>
+                {!filled && r.required
+                  ? <span className="item-go" style={{ opacity: 1 }}>Fix<ChevronRight size={13} aria-hidden="true" /></span>
+                  : <ChevronRight size={15} aria-hidden="true" className="summary-chevron" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    ))}
+  </>);
 }

@@ -18,8 +18,5 @@ export const UI = {
   warnBg: "var(--warnBg)",
 };
 
-export const inputBase = {
-  width: "100%", border: `1px solid ${UI.fieldLine}`, borderRadius: 4,
-  padding: "7px 10px", fontFamily: "inherit",
-  fontSize: 14, color: UI.ink, background: "var(--field-bg)", outline: "none",
-};
+// the field look is a css class (.input-base) so the stylesheet can change it
+export const inputBase = "input-base";
