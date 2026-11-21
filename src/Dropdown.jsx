@@ -352,7 +352,7 @@ export default function Dropdown({ value, onChange, options, placeholder = "", a
             <div key={o.value} role="option" aria-selected={on}
               className="dropdown-option"
               onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)} onMouseEnter={() => setActive(i)}>
-              <span className="dropdown-check">{on && <Check size={16} strokeWidth={2.5} />}</span>
+              <span className="dropdown-check">{on && <Check className="check-draw" size={16} strokeWidth={2.5} />}</span>
               {o.label}
             </div>
           );

@@ -2665,7 +2665,7 @@ export default function SyllabusBuilder() {
                   fontWeight: on ? 600 : 400, cursor: "pointer" }}>
                 <t.i size={17} strokeWidth={1.75} style={{ flexShrink: 0, color: on ? UI.orangeText : UI.muted }} />
                 <span style={{ flex: 1 }}>{t.n}</span>
-                {done && <Check size={14} style={{ color: UI.good, flexShrink: 0 }} />}
+                {done && <Check className="check-draw" size={14} style={{ color: UI.good, flexShrink: 0 }} />}
               </button>
             );
           })}
@@ -2762,7 +2762,7 @@ export default function SyllabusBuilder() {
                         <Loader2 size={15} className="animate-spin" style={{ color: UI.slate }} />
                       </div>}
                     {lookupStatus === "ok" &&
-                      <Check size={15} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: UI.good }} />}
+                      <Check className="check-draw" size={15} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: UI.good }} />}
                     {lookupStatus === "error" &&
                       <X size={15} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: UI.warn }} />}
                     </div>
@@ -3002,7 +3002,7 @@ export default function SyllabusBuilder() {
                 <div className="total-row" role="status">
                   <span>Total</span>
                   <span className={ok ? "is-good" : "is-warn"}>
-                    {detail}{ok ? <Check size={15} strokeWidth={2.5} aria-hidden="true" /> : <AlertTriangle size={14} aria-hidden="true" />}
+                    {detail}{ok ? <Check className="check-draw" size={15} strokeWidth={2.5} aria-hidden="true" /> : <AlertTriangle size={14} aria-hidden="true" />}
                   </span>
                 </div>
               );
@@ -3416,7 +3416,7 @@ export default function SyllabusBuilder() {
                       <span className="row-detail" style={n && c.level === "fail" ? { color: UI.warn } : undefined}>
                         {!n ? "" : c.level === "fail" ? `${n} to fix` : `${n} to review`}
                       </span>
-                      {!n && <Check size={15} aria-label="Passed" style={{ color: UI.good, flexShrink: 0 }} />}
+                      {!n && <Check className="check-draw" size={15} aria-label="Passed" style={{ color: UI.good, flexShrink: 0 }} />}
                     </div>
                     {n > 0 && (
                       <div className="open-list">
@@ -3477,7 +3477,7 @@ export default function SyllabusBuilder() {
                   {checks.filter((c) => c[1]).map(([label]) => (
                     <div key={label} className="list-item is-done">
                       <span style={{ flex: 1 }}>{label}</span>
-                      <Check size={14} aria-hidden="true" style={{ color: UI.good, flexShrink: 0 }} />
+                      <Check className="check-draw" size={14} aria-hidden="true" style={{ color: UI.good, flexShrink: 0 }} />
                     </div>
                   ))}
                 </ExpandRow>
@@ -3576,7 +3576,7 @@ function ReviewPanel({ groups, onJump }) {
       <span>Required items</span>
       <span className={missing ? "is-warn" : "is-good"}>
         {missing ? `${missing} missing` : "All filled"}
-        {missing ? <AlertTriangle size={14} aria-hidden="true" /> : <Check size={15} strokeWidth={2.5} aria-hidden="true" />}
+        {missing ? <AlertTriangle size={14} aria-hidden="true" /> : <Check className="check-draw" size={15} strokeWidth={2.5} aria-hidden="true" />}
       </span>
     </div>
     {groups.map((g) => (
